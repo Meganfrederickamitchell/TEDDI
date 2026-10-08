@@ -1,351 +1,292 @@
 import streamlit as st
 import pandas as pd
-import docx
-import os
 import random
-from docx.shared import Inches, Pt, RGBColor
-from docx.enum.text import WD_ALIGN_PARAGRAPH
 from io import BytesIO
+from docx import Document
+from docx.shared import Pt, Inches
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-# --- Page Configuration ---
+# -----------------------------------------------------------------------------
+# PAGE CONFIGURATION & CUSTOM THEMING
+# -----------------------------------------------------------------------------
 st.set_page_config(
-    page_title="TEDDI - Exam Builder",
+    page_title="TEDDI | Tagged Exam Database",
     page_icon="🧸",
     layout="wide"
 )
 
-# Custom Styling: Turquoise, Orange, and Orchid Color Blocks
+# Custom CSS for modern styling
 st.markdown("""
-<style>
-    .main-header {
-        background: linear-gradient(135deg, #8B5CF6 0%, #06B6D4 100%);
-        padding: 2rem;
-        border-radius: 16px;
-        text-align: center;
+    <style>
+    /* Main Background & Fonts */
+    .main {
+        background-color: #F8FAFC;
+    }
+    
+    /* Custom Header Banner */
+    .teddi-header {
+        background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+        padding: 1.8rem 2rem;
+        border-radius: 12px;
+        color: white;
         margin-bottom: 2rem;
-        color: #FFFFFF;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.2);
     }
-    .main-header h1 {
-        color: #FFFFFF !important;
-        font-size: 2.8rem;
+    .teddi-header h1 {
+        color: white !important;
+        font-family: 'Inter', sans-serif;
         font-weight: 800;
-        margin-bottom: 0.5rem;
-    }
-    .main-header p {
-        color: #F8FAFC !important;
-        font-size: 1.1rem;
         margin: 0;
+        font-size: 2.2rem;
     }
-    .tag {
-        display: inline-block;
-        padding: 0.3rem 0.8rem;
-        border-radius: 16px;
-        font-size: 0.85rem;
-        font-weight: 700;
-        margin-right: 0.4rem;
+    .teddi-header p {
+        color: #E0E7FF !important;
+        font-size: 1.05rem;
+        margin-top: 0.3rem;
+        margin-bottom: 0;
     }
-    .tag-points { background-color: #FF7F3E; color: #FFFFFF; }      /* Orange */
-    .tag-topic { background-color: #06B6D4; color: #FFFFFF; }       /* Turquoise */
-    .tag-blooms { background-color: #8B5CF6; color: #FFFFFF; }      /* Orchid */
-</style>
+    
+    /* Stat / Count Badges */
+    .badge-card {
+        background-color: white;
+        border-radius: 10px;
+        padding: 1rem;
+        border-left: 5px solid #4F46E5;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+        margin-bottom: 1rem;
+    }
+    
+    /* Style Expandable Question Cards */
+    .st-emotion-cache-1h993ip, div[data-testid="stExpander"] {
+        background-color: white;
+        border: 1px solid #E2E8F0;
+        border-radius: 10px;
+        margin-bottom: 0.8rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    }
+    
+    /* Custom Primary Buttons */
+    .stButton>button {
+        border-radius: 8px;
+        font-weight: 600;
+        transition: all 0.2s;
+    }
+    
+    /* Sidebar Styling */
+    section[data-testid="stSidebar"] {
+        background-color: #F1F5F9;
+    }
+    </style>
 """, unsafe_allow_html=True)
 
-# --- App Header ---
+# -----------------------------------------------------------------------------
+# HEADER BANNER
+# -----------------------------------------------------------------------------
 st.markdown("""
-<div class="main-header">
-    <h1>🧸 TEDDI - Exam Builder</h1>
-    <p>Select questions from the bank or build balanced exams by Blooms Taxonomy category.</p>
-</div>
+    <div class="teddi-header">
+        <h1>🧸 TEDDI</h1>
+        <p><b>Tagged Exam Database for Departmental Instruction</b> — Search, filter, and build custom exams aligned with Bloom's Taxonomy.</p>
+    </div>
 """, unsafe_allow_html=True)
 
-# --- Helper Function: Safely extract a single clean string from any cell ---
-def get_cell_text(val):
-    if isinstance(val, pd.Series):
-        valid_vals = [str(x).strip() for x in val.dropna() if str(x).strip() not in ['', 'nan', 'N/A']]
-        return valid_vals[0] if valid_vals else ""
-    if pd.isnull(val):
-        return ""
-    str_val = str(val).strip()
-    return "" if str_val in ['nan', 'N/A'] else str_val
-
-# --- Helper Function: Locate Image Path safely across Linux & Streamlit Cloud ---
-def get_valid_image_path(img_name):
-    clean_name = get_cell_text(img_name)
-    if not clean_name:
-        return None
-    
-    # Strip leading slashes
-    clean_name = clean_name.lstrip('/\\')
-    base_filename = os.path.basename(clean_name)
-    
-    # List candidate paths to check
-    candidates = [
-        clean_name,
-        os.path.join("images", base_filename),
-        os.path.join(os.getcwd(), clean_name),
-        os.path.join(os.getcwd(), "images", base_filename)
-    ]
-    
-    # Handle jpg vs png extension mismatch
-    if base_filename.endswith(".jpg"):
-        candidates.append(os.path.join("images", base_filename.replace(".jpg", ".png")))
-    elif base_filename.endswith(".png"):
-        candidates.append(os.path.join("images", base_filename.replace(".png", ".jpg")))
-    
-    for path in candidates:
-        if path and os.path.exists(path) and os.path.isfile(path):
-            return path
-    return None
-
-# --- Load Data Safely ---
+# -----------------------------------------------------------------------------
+# LOAD DATA
+# -----------------------------------------------------------------------------
 @st.cache_data
 def load_data():
-    df = pd.read_csv("exam_questions_extracted.csv")
-    
-    # Deduplicate column names if CSV has duplicate headers
-    cols = []
-    counts = {}
-    for col in df.columns:
-        c_clean = col.strip()
-        if c_clean in counts:
-            counts[c_clean] += 1
-            cols.append(f"{c_clean}_{counts[c_clean]}")
-        else:
-            counts[c_clean] = 0
-            cols.append(c_clean)
-    df.columns = cols
-    
-    # Standardize column mapping
-    col_map = {}
-    for col in df.columns:
-        c_lower = col.lower()
-        if 'topic' in c_lower and 'Topic' not in col_map.values():
-            col_map[col] = 'Topic'
-        elif 'bloom' in c_lower and 'Blooms Taxonomy Level' not in col_map.values():
-            col_map[col] = 'Blooms Taxonomy Level'
-        elif 'question' in c_lower and 'text' in c_lower and 'Question Text' not in col_map.values():
-            col_map[col] = 'Question Text'
-        elif 'point' in c_lower and 'Points' not in col_map.values():
-            col_map[col] = 'Points'
-        elif ('correct' in c_lower or 'answer' in c_lower) and 'Correct Answer' not in col_map.values():
-            col_map[col] = 'Correct Answer'
-        elif 'image' in c_lower and 'Image File' not in col_map.values():
-            col_map[col] = 'Image File'
-        elif 'scenario' in c_lower or 'context' in c_lower:
-            col_map[col] = 'Context Scenario'
-            
-    df = df.rename(columns=col_map)
-    
-    # Ensure fallbacks exist
-    if 'Topic' not in df.columns: df['Topic'] = 'General'
-    if 'Blooms Taxonomy Level' not in df.columns: df['Blooms Taxonomy Level'] = 'N/A'
-    if 'Points' not in df.columns: df['Points'] = '1'
-    if 'Question Text' not in df.columns: df['Question Text'] = 'Question text missing'
-    if 'Context Scenario' not in df.columns: df['Context Scenario'] = ''
-    
-    df['Topic'] = df['Topic'].fillna('General').astype(str)
-    df['Blooms Taxonomy Level'] = df['Blooms Taxonomy Level'].fillna('N/A').astype(str)
-    
-    return df
+    try:
+        df = pd.read_csv("exam_questions_extracted.csv")
+        for col in df.columns:
+            df[col] = df[col].fillna("N/A")
+        return df
+    except Exception as e:
+        st.error(f"Error loading CSV file: {e}")
+        return pd.DataFrame()
 
-try:
-    df = load_data()
-except Exception as e:
-    st.error(f"Error loading CSV file: {e}")
+df = load_data()
+
+if df.empty:
     st.stop()
 
-# --- Sidebar Filters ---
-st.sidebar.header("🔍 Exam Criteria & Filters")
+BLOOMS_COL = "Bloom's Taxonomy Level"
 
-# Topic Multiselect
-topics = sorted(list(df['Topic'].unique()))
-selected_topics = st.sidebar.multiselect("Filter Topics", options=topics, default=topics)
+# -----------------------------------------------------------------------------
+# SESSION STATE SETUP (Exam Basket)
+# -----------------------------------------------------------------------------
+if "selected_indices" not in st.session_state:
+    st.session_state.selected_indices = set()
 
-filtered_df = df[df['Topic'].isin(selected_topics)].copy()
+# -----------------------------------------------------------------------------
+# DOCX GENERATION HELPER FUNCTIONS
+# -----------------------------------------------------------------------------
+def generate_docx(selected_df, include_answers=False):
+    doc = Document()
+    
+    title_text = "FINAL EXAM - ANSWER KEY" if include_answers else "FINAL EXAM"
+    title = doc.add_heading(title_text, level=1)
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    if not include_answers:
+        doc.add_paragraph("Name: _______________________\t\tDate: _____________\n")
+    
+    doc.add_paragraph("Instructions: Answer all questions cleanly in the spaces provided.\n")
+    
+    grouped = selected_df.groupby("Parent Question Text", sort=False)
+    
+    q_num = 1
+    for parent_text, group in grouped:
+        if parent_text != "N/A" and len(str(parent_text).strip()) > 0:
+            doc.add_heading("Context / Scenario:", level=3)
+            p_context = doc.add_paragraph(str(parent_text))
+            p_context.runs[0].font.italic = True
+            doc.add_paragraph()
+        
+        for idx, row in group.iterrows():
+            q_type = row['Question Type']
+            b_level = row[BLOOMS_COL]
+            
+            q_p = doc.add_paragraph()
+            q_p.add_run(f"Q{q_num}. [{q_type} | {b_level}]\n").bold = True
+            q_p.add_run(f"{row['Question Part Text']}\n")
+            
+            if row['Photo associated with the exam question if applicable'] != "N/A":
+                q_p.add_run(f"[Associated Diagram/Image: {row['Photo associated with the exam question if applicable']}]\n").italic = True
+            
+            if include_answers:
+                ans_p = doc.add_paragraph()
+                ans_p.add_run(f"Correct Answer: {row['Answer Details']}").bold = True
+            else:
+                if q_type in ['Essay', 'Short Answer', 'Draw']:
+                    doc.add_paragraph("\n\n_________________________________________________________________________________\n" * 2)
+            
+            doc.add_paragraph()
+            q_num += 1
+            
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+# -----------------------------------------------------------------------------
+# SIDEBAR - AUTO-GENERATOR & EXPORT
+# -----------------------------------------------------------------------------
+st.sidebar.title("🛠️ Exam Builder")
+
+basket_count = len(st.session_state.selected_indices)
+st.sidebar.metric(label="Questions in Exam Basket", value=basket_count)
+
+if basket_count > 0:
+    if st.sidebar.button("🗑️ Clear Basket", use_container_width=True):
+        st.session_state.selected_indices = set()
+        st.rerun()
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("🎯 Questions by Blooms Category")
+st.sidebar.subheader("🎲 Auto-Generate Exam")
 
-# Number of questions selector per Blooms Taxonomy Level
-blooms_levels = sorted(list(df['Blooms Taxonomy Level'].unique()))
-blooms_counts = {}
+blooms_levels = df[BLOOMS_COL].unique().tolist()
+blooms_targets = {}
 
-for b_level in blooms_levels:
-    available_in_level = len(filtered_df[filtered_df['Blooms Taxonomy Level'] == b_level])
-    blooms_counts[b_level] = st.sidebar.number_input(
-        f"{b_level} (Available: {available_in_level})",
-        min_value=0,
-        max_value=available_in_level,
+st.sidebar.caption("Set target question counts per Bloom's level:")
+for level in sorted(blooms_levels):
+    count_available = len(df[df[BLOOMS_COL] == level])
+    blooms_targets[level] = st.sidebar.number_input(
+        f"{level} (Max: {count_available})", 
+        min_value=0, 
+        max_value=count_available, 
         value=0,
-        step=1
+        key=f"target_{level}"
     )
 
-if 'selected_q_indices' not in st.session_state:
-    st.session_state.selected_q_indices = []
-
-# Auto-generate random set based on category counts
-if st.sidebar.button("🎲 Generate Random Exam Set"):
-    sampled_indices = []
-    for b_level, count in blooms_counts.items():
-        if count > 0:
-            level_df = filtered_df[filtered_df['Blooms Taxonomy Level'] == b_level]
-            sampled = level_df.sample(n=count, random_state=random.randint(1, 10000))
-            sampled_indices.extend(sampled.index.tolist())
-    sampled_indices.sort()
-    st.session_state.selected_q_indices = sampled_indices
+if st.sidebar.button("⚡ Auto-Select Questions", type="primary", use_container_width=True):
+    new_selection = set()
+    for level, target in blooms_targets.items():
+        if target > 0:
+            level_indices = df[df[BLOOMS_COL] == level].index.tolist()
+            sampled = random.sample(level_indices, min(target, len(level_indices)))
+            new_selection.update(sampled)
+    st.session_state.selected_indices = new_selection
+    st.sidebar.success(f"Selected {len(new_selection)} questions!")
     st.rerun()
 
-# --- Main Layout ---
-col_bank, col_selected = st.columns([1.2, 1])
+st.sidebar.markdown("---")
+st.sidebar.subheader("📥 Export Test Documents")
 
-with col_bank:
-    st.subheader(f"📚 Question Bank ({len(filtered_df)})")
+if len(st.session_state.selected_indices) > 0:
+    selected_df = df.loc[list(st.session_state.selected_indices)]
     
-    for idx, row in filtered_df.iterrows():
-        is_selected = idx in st.session_state.selected_q_indices
-        q_num = get_cell_text(row.get('Question Number')) or str(idx + 1)
-        q_text = get_cell_text(row.get('Question Text'))
-        scenario_text = get_cell_text(row.get('Context Scenario'))
-        pts = get_cell_text(row.get('Points')) or "1"
-        top = get_cell_text(row.get('Topic')) or "General"
-        blm = get_cell_text(row.get('Blooms Taxonomy Level')) or "N/A"
-        
-        with st.container():
-            st.markdown(f"""
-            <div>
-                <span class="tag tag-points">{pts} Points</span>
-                <span class="tag tag-topic">Topic: {top}</span>
-                <span class="tag tag-blooms">Blooms: {blm}</span>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            if scenario_text:
-                st.markdown(f"**Context / Scenario:** *{scenario_text}*")
-            
-            # Display Image if available
-            img_path = get_valid_image_path(row.get('Image File'))
-            if img_path:
-                st.image(img_path, width=420)
-            
-            st.markdown(f"<h4 style='margin-top: 0.4rem; color: #0F172A;'>Q{q_num}. {q_text}</h4>", unsafe_allow_html=True)
-            
-            c1, _ = st.columns([1, 4])
-            if is_selected:
-                if c1.button("Remove", key=f"rem_{idx}"):
-                    st.session_state.selected_q_indices.remove(idx)
-                    st.rerun()
-            else:
-                if c1.button("Add +", key=f"add_{idx}"):
-                    st.session_state.selected_q_indices.append(idx)
-                    st.session_state.selected_q_indices.sort()
-                    st.rerun()
-            st.markdown("---")
+    student_docx = generate_docx(selected_df, include_answers=False)
+    st.sidebar.download_button(
+        label="📄 Download Student Exam (.docx)",
+        data=student_docx,
+        file_name="TEDDI_Student_Exam.docx",
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        use_container_width=True
+    )
+    
+    key_docx = generate_docx(selected_df, include_answers=True)
+    st.sidebar.download_button(
+        label="🔑 Download Answer Key (.docx)",
+        data=key_docx,
+        file_name="TEDDI_Teacher_Answer_Key.docx",
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        use_container_width=True
+    )
+else:
+    st.sidebar.info("Add questions to the basket to export docx files.")
 
-with col_selected:
-    st.subheader(f"📋 Selected Exam Questions ({len(st.session_state.selected_q_indices)})")
+# -----------------------------------------------------------------------------
+# MAIN CONTENT - FILTERS & QUESTION TABLE
+# -----------------------------------------------------------------------------
+st.subheader("🔍 Explore Question Bank")
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    selected_blooms = st.multiselect("Filter by Bloom's Level", options=sorted(blooms_levels))
+with col2:
+    q_types = sorted(df["Question Type"].unique().tolist())
+    selected_types = st.multiselect("Filter by Question Type", options=q_types)
+with col3:
+    search_query = st.text_input("Search Text Keywords", value="", placeholder="e.g. Carbon, Heart, Hemoglobin...")
+
+filtered_df = df.copy()
+
+if selected_blooms:
+    filtered_df = filtered_df[filtered_df[BLOOMS_COL].isin(selected_blooms)]
+if selected_types:
+    filtered_df = filtered_df[filtered_df["Question Type"].isin(selected_types)]
+if search_query:
+    filtered_df = filtered_df[
+        filtered_df["Question Part Text"].str.contains(search_query, case=False) |
+        filtered_df["Parent Question Text"].str.contains(search_query, case=False) |
+        filtered_df["Part Name"].str.contains(search_query, case=False)
+    ]
+
+st.markdown(f"**Showing {len(filtered_df)} of {len(df)} total questions**")
+
+for idx, row in filtered_df.iterrows():
+    is_in_basket = idx in st.session_state.selected_indices
+    b_lvl = row[BLOOMS_COL]
+    q_typ = row['Question Type']
     
-    if not st.session_state.selected_q_indices:
-        st.info("Use the sidebar counts to auto-generate a set, or click **Add +** on questions individually!")
-    else:
-        st.session_state.selected_q_indices.sort()
-        selected_df = df.loc[st.session_state.selected_q_indices].copy()
+    card_title = f"{'✅ IN BASKET | ' if is_in_basket else ''}[{q_typ}] [{b_lvl}] — {row['Part Name']}"
+    
+    with st.expander(card_title):
+        if row['Parent Question Text'] != "N/A":
+            st.markdown(f"**📖 Context / Scenario:**\n> *{row['Parent Question Text']}*")
         
-        for idx, row in selected_df.iterrows():
-            q_num = get_cell_text(row.get('Question Number')) or str(idx + 1)
-            q_text = get_cell_text(row.get('Question Text'))
-            st.markdown(f"**Q{q_num}:** {q_text}")
-            if st.button("❌ Remove", key=f"sel_rem_{idx}"):
-                st.session_state.selected_q_indices.remove(idx)
-                st.rerun()
+        st.markdown(f"**❓ Question:** {row['Question Part Text']}")
+        st.markdown(f"**💡 Key / Answer:** `{row['Answer Details']}`")
+        
+        if row['Photo associated with the exam question if applicable'] != "N/A":
+            st.warning(f"🖼️ **Diagram Reference:** {row['Photo associated with the exam question if applicable']}")
         
         st.markdown("---")
-        
-        # --- Word Document Generator ---
-        def generate_docx(selected_questions, is_answer_key=False):
-            doc = docx.Document()
-            
-            # Title
-            title = doc.add_paragraph()
-            heading_text = "FINAL EXAM - ANSWER KEY" if is_answer_key else "FINAL EXAM"
-            r = title.add_run(heading_text)
-            r.bold = True
-            r.font.size = Pt(22)
-            r.font.color.rgb = RGBColor(15, 118, 110)
-            title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            
-            if not is_answer_key:
-                p_sub = doc.add_paragraph("Name: ________________________   Date: ______________\n")
-                p_sub.alignment = WD_ALIGN_PARAGRAPH.LEFT
-                
-                p_inst = doc.add_paragraph("Instructions: Answer all questions cleanly in the spaces provided.\n")
-                p_inst.runs[0].font.italic = True
-            
-            for i, (_, row) in enumerate(selected_questions.iterrows(), 1):
-                scenario_text = get_cell_text(row.get('Context Scenario'))
-                if scenario_text:
-                    p_scen = doc.add_paragraph()
-                    r_lbl = p_scen.add_run("Context / Scenario:\n")
-                    r_lbl.bold = True
-                    r_lbl.font.color.rgb = RGBColor(15, 118, 110)
-                    r_txt = p_scen.add_run(scenario_text)
-                    r_txt.font.italic = True
-                
-                # Image Embedding
-                img_path = get_valid_image_path(row.get('Image File'))
-                if img_path:
-                    doc.add_paragraph()
-                    doc.add_picture(img_path, width=Inches(4.5))
-                    doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.LEFT
-                
-                # Question Line
-                p_q = doc.add_paragraph()
-                pts = get_cell_text(row.get('Points')) or "1"
-                blm = get_cell_text(row.get('Blooms Taxonomy Level')) or "Remember"
-                
-                r_qnum = p_q.add_run(f"Q{i}. [{blm}] ")
-                r_qnum.bold = True
-                
-                q_text_val = get_cell_text(row.get('Question Text'))
-                p_q.add_run(q_text_val + "\n")
-                
-                # Choices
-                for choice_col in ['Choice A', 'Choice B', 'Choice C', 'Choice D', 'Choice E']:
-                    c_val = get_cell_text(row.get(choice_col))
-                    if c_val:
-                        p_q.add_run(f"   [{choice_col[-1]}] {c_val}\n")
-                
-                # Correct Answer for Answer Key
-                if is_answer_key:
-                    ans_val = get_cell_text(row.get('Correct Answer'))
-                    if ans_val:
-                        p_ans = doc.add_paragraph()
-                        r_ans = p_ans.add_run(f"   --> CORRECT ANSWER: {ans_val}")
-                        r_ans.bold = True
-                        r_ans.font.color.rgb = RGBColor(6, 182, 212)
-                
-                doc.add_paragraph("\n")
-                
-            buffer = BytesIO()
-            doc.save(buffer)
-            buffer.seek(0)
-            return buffer
-
-        # Export Buttons
-        col_ex, col_ak = st.columns(2)
-        
-        exam_docx = generate_docx(selected_df, is_answer_key=False)
-        col_ex.download_button(
-            label="📄 Download Exam (.docx)",
-            data=exam_docx,
-            file_name="TEDDI_Final_Exam.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        )
-        
-        key_docx = generate_docx(selected_df, is_answer_key=True)
-        col_ak.download_button(
-            label="🔑 Download Answer Key (.docx)",
-            data=key_docx,
-            file_name="TEDDI_Answer_Key.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        )
+        if is_in_basket:
+            if st.button("➖ Remove from Exam Basket", key=f"btn_rem_{idx}"):
+                st.session_state.selected_indices.remove(idx)
+                st.rerun()
+        else:
+            if st.button("➕ Add to Exam Basket", key=f"btn_add_{idx}"):
+                st.session_state.selected_indices.add(idx)
+                st.rerun()
