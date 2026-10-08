@@ -6,136 +6,106 @@ from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from io import BytesIO
 
-# --- Page Configuration & High-Contrast Light Theme ---
+# --- Page Configuration ---
 st.set_page_config(
     page_title="TEDDI - Exam Builder",
     page_icon="🧸",
     layout="wide"
 )
 
-# Custom Styling: Light Solid Background with Turquoise, Orange, and Orchid Color Blocks
+# Custom Styling (Clean, high-contrast palette without breaking dropdowns)
 st.markdown("""
 <style>
-    /* Light solid overall canvas for maximum contrast */
-    .stApp {
-        background-color: #F8FAFC !important;
-        color: #0F172A !important;
-        font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    }
-    
-    /* Main Header Card (Orchid Block) */
+    /* Main Header Container */
     .main-header {
-        background-color: #8B5CF6;
-        padding: 2rem;
+        background: linear-gradient(135deg, #8B5CF6 0%, #06B6D4 100%);
+        padding: 2.2rem;
         border-radius: 16px;
-        box-shadow: 0 4px 14px rgba(139, 92, 246, 0.25);
         text-align: center;
         margin-bottom: 2rem;
         color: #FFFFFF;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
     }
     
     .main-header h1 {
         color: #FFFFFF !important;
-        font-size: 2.6rem;
+        font-size: 2.8rem;
         font-weight: 800;
-        margin-bottom: 0.3rem;
-    }
-    
-    .author-credit {
-        color: #F3E8FF !important;
-        font-size: 1.05rem;
-        font-weight: 600;
-        margin-top: 0.2rem;
-        margin-bottom: 0.6rem;
+        margin-bottom: 0.5rem;
     }
     
     .main-header p {
         color: #F8FAFC !important;
-        font-size: 1.05rem;
+        font-size: 1.1rem;
+        margin: 0;
     }
     
-    /* Question Card Containers */
-    .question-card {
-        background: #FFFFFF;
-        border-radius: 12px;
-        padding: 1.4rem;
-        margin-bottom: 1rem;
-        border: 1px solid #E2E8F0;
-        border-left: 6px solid #FF7F3E; /* Orange accent border */
-        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-    }
-    
-    /* Color Block Tags */
+    /* Tags */
     .tag {
         display: inline-block;
         padding: 0.3rem 0.8rem;
-        border-radius: 20px;
-        font-size: 0.82rem;
+        border-radius: 16px;
+        font-size: 0.85rem;
         font-weight: 700;
         margin-right: 0.4rem;
     }
     .tag-points { background-color: #FF7F3E; color: #FFFFFF; }      /* Orange */
     .tag-topic { background-color: #06B6D4; color: #FFFFFF; }       /* Turquoise */
-    .tag-blooms { background-color: #A855F7; color: #FFFFFF; }      /* Orchid */
-    
-    /* Sidebar Styling */
-    section[data-testid="stSidebar"] {
-        background-color: #FFFFFF !important;
-        border-right: 1px solid #E2E8F0;
-    }
-    
-    /* Buttons */
-    .stButton>button {
-        background-color: #06B6D4 !important; /* Turquoise */
-        color: #FFFFFF !important;
-        border-radius: 8px !important;
-        font-weight: 600 !important;
-        border: none !important;
-    }
-    .stButton>button:hover {
-        background-color: #0891B2 !important;
-    }
+    .tag-blooms { background-color: #8B5CF6; color: #FFFFFF; }      /* Orchid */
 </style>
 """, unsafe_allow_html=True)
 
-# --- App Header ---
+# --- App Header (Credit line removed) ---
 st.markdown("""
 <div class="main-header">
     <h1>🧸 TEDDI - Exam Builder</h1>
-    <div class="author-credit">Created by Megan Mitchell, PhD Candidate in the Organismic and Evolutionary Biology Graduate Program</div>
-    <p>Select questions from the bank to construct custom exams and answer keys instantly.</p>
+    <p>Select questions from the question bank to construct custom exams and answer keys instantly.</p>
 </div>
 """, unsafe_allow_html=True)
 
-# --- Load & Clean Data safely ---
+# --- Load & Normalize Data safely ---
 @st.cache_data
 def load_data():
     df = pd.read_csv("exam_questions_extracted.csv")
     
-    # Normalize column names to avoid KeyErrors
+    # Normalize column names flexibly
     col_map = {}
     for col in df.columns:
-        c_lower = col.strip().lower()
-        if 'topic' in c_lower:
+        c_clean = col.strip().lower()
+        if 'topic' in c_clean:
             col_map[col] = 'Topic'
-        elif 'bloom' in c_lower:
+        elif 'bloom' in c_clean:
             col_map[col] = 'Blooms Taxonomy Level'
-        elif 'question' in c_lower and 'text' in c_lower:
+        elif 'question' in c_clean and 'text' in c_clean:
             col_map[col] = 'Question Text'
-        elif 'point' in c_lower:
+        elif 'point' in c_clean:
             col_map[col] = 'Points'
-        elif 'correct' in c_lower or 'answer' in c_lower:
+        elif 'correct' in c_clean or 'answer' in c_clean:
             col_map[col] = 'Correct Answer'
-        elif 'image' in c_lower:
+        elif 'image' in c_clean:
             col_map[col] = 'Image File'
             
     df = df.rename(columns=col_map)
     
-    # Ensure mandatory fallback columns exist
-    for req_col in ['Topic', 'Blooms Taxonomy Level', 'Question Text', 'Points', 'Correct Answer', 'Image File']:
-        if req_col not in df.columns:
-            df[req_col] = 'N/A'
-            
+    # Fill missing default values so filters don't fail
+    if 'Topic' in df.columns:
+        df['Topic'] = df['Topic'].fillna('General').astype(str)
+    else:
+        df['Topic'] = 'General'
+        
+    if 'Blooms Taxonomy Level' in df.columns:
+        df['Blooms Taxonomy Level'] = df['Blooms Taxonomy Level'].fillna('N/A').astype(str)
+    else:
+        df['Blooms Taxonomy Level'] = 'N/A'
+        
+    if 'Points' in df.columns:
+        df['Points'] = df['Points'].fillna('1').astype(str)
+    else:
+        df['Points'] = '1'
+
+    if 'Question Text' not in df.columns:
+        df['Question Text'] = 'Question text unavailable'
+        
     return df
 
 try:
@@ -147,18 +117,18 @@ except Exception as e:
 # --- Sidebar Filters ---
 st.sidebar.header("🔍 Filter Question Bank")
 
-# Topic Filter
-topics = sorted([str(t) for t in df['Topic'].dropna().unique() if str(t).strip() != ''])
+# Populate unique topics
+topics = sorted(list(df['Topic'].unique()))
 selected_topics = st.sidebar.multiselect("Select Topics", options=topics, default=topics)
 
-# Blooms Taxonomy Filter
-blooms = sorted([str(b) for b in df['Blooms Taxonomy Level'].dropna().unique() if str(b).strip() != ''])
+# Populate unique blooms
+blooms = sorted(list(df['Blooms Taxonomy Level'].unique()))
 selected_blooms = st.sidebar.multiselect("Blooms Taxonomy Level", options=blooms, default=blooms)
 
 # Filter Dataframe
 filtered_df = df[
-    (df['Topic'].astype(str).isin(selected_topics)) &
-    (df['Blooms Taxonomy Level'].astype(str).isin(selected_blooms))
+    (df['Topic'].isin(selected_topics)) &
+    (df['Blooms Taxonomy Level'].isin(selected_blooms))
 ]
 
 st.sidebar.markdown("---")
@@ -179,22 +149,20 @@ with col_bank:
         
         with st.container():
             st.markdown(f"""
-            <div class="question-card">
-                <div>
-                    <span class="tag tag-points">{row.get('Points', '1')} Points</span>
-                    <span class="tag tag-topic">Topic: {row.get('Topic', 'General')}</span>
-                    <span class="tag tag-blooms">Blooms: {row.get('Blooms Taxonomy Level', 'N/A')}</span>
-                </div>
-                <h4 style="margin-top: 0.8rem; color: #0F172A;">Q{q_id}. {row['Question Text']}</h4>
+            <div>
+                <span class="tag tag-points">{row.get('Points', '1')} Points</span>
+                <span class="tag tag-topic">Topic: {row.get('Topic', 'General')}</span>
+                <span class="tag tag-blooms">Blooms: {row.get('Blooms Taxonomy Level', 'N/A')}</span>
             </div>
+            <h4 style="margin-top: 0.6rem; color: #0F172A;">Q{q_id}. {row['Question Text']}</h4>
             """, unsafe_allow_html=True)
             
             # Display Image if mapping exists
             img_file = row.get('Image File')
-            if pd.notnull(img_file) and str(img_file).strip() != "" and str(img_file) != 'N/A':
+            if pd.notnull(img_file) and str(img_file).strip() != "" and str(img_file) != 'nan':
                 img_path = str(img_file).strip()
                 if os.path.exists(img_path):
-                    st.image(img_path, width=320)
+                    st.image(img_path, width=340)
             
             c1, c2 = st.columns([1, 4])
             if is_selected:
@@ -264,7 +232,7 @@ with col_selected:
                 
                 # Image Embedding
                 img_file = row.get('Image File')
-                if pd.notnull(img_file) and str(img_file).strip() != "" and str(img_file) != 'N/A':
+                if pd.notnull(img_file) and str(img_file).strip() != "" and str(img_file) != 'nan':
                     img_path = str(img_file).strip()
                     if os.path.exists(img_path):
                         doc.add_paragraph()
