@@ -14,7 +14,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Custom Styling: Turquoise, Orange, and Orchid Accents
+# Custom Styling: Turquoise, Orange, and Orchid Color Blocks
 st.markdown("""
 <style>
     .main-header {
@@ -69,19 +69,29 @@ def get_cell_text(val):
     str_val = str(val).strip()
     return "" if str_val in ['nan', 'N/A'] else str_val
 
-# --- Helper Function: Locate Image Path safely on any OS ---
+# --- Helper Function: Locate Image Path safely across Linux & Streamlit Cloud ---
 def get_valid_image_path(img_name):
     clean_name = get_cell_text(img_name)
     if not clean_name:
         return None
     
-    # Check direct path, images/ prefix, or base path
+    # Strip leading slashes
+    clean_name = clean_name.lstrip('/\\')
+    base_filename = os.path.basename(clean_name)
+    
+    # List candidate paths to check
     candidates = [
         clean_name,
-        os.path.join("images", clean_name),
-        os.path.join("images", os.path.basename(clean_name)),
-        os.path.join(os.path.dirname(__file__), "images", os.path.basename(clean_name)) if '__file__' in globals() else ""
+        os.path.join("images", base_filename),
+        os.path.join(os.getcwd(), clean_name),
+        os.path.join(os.getcwd(), "images", base_filename)
     ]
+    
+    # Handle jpg vs png extension mismatch
+    if base_filename.endswith(".jpg"):
+        candidates.append(os.path.join("images", base_filename.replace(".jpg", ".png")))
+    elif base_filename.endswith(".png"):
+        candidates.append(os.path.join("images", base_filename.replace(".png", ".jpg")))
     
     for path in candidates:
         if path and os.path.exists(path) and os.path.isfile(path):
@@ -182,7 +192,6 @@ if st.sidebar.button("🎲 Generate Random Exam Set"):
             level_df = filtered_df[filtered_df['Blooms Taxonomy Level'] == b_level]
             sampled = level_df.sample(n=count, random_state=random.randint(1, 10000))
             sampled_indices.extend(sampled.index.tolist())
-    # Sort selected indices so questions appear in logical exam order
     sampled_indices.sort()
     st.session_state.selected_q_indices = sampled_indices
     st.rerun()
@@ -214,12 +223,12 @@ with col_bank:
             if scenario_text:
                 st.markdown(f"**Context / Scenario:** *{scenario_text}*")
             
-            st.markdown(f"<h4 style='margin-top: 0.4rem; color: #0F172A;'>Q{q_num}. {q_text}</h4>", unsafe_allow_html=True)
-            
             # Display Image if available
             img_path = get_valid_image_path(row.get('Image File'))
             if img_path:
-                st.image(img_path, width=340)
+                st.image(img_path, width=420)
+            
+            st.markdown(f"<h4 style='margin-top: 0.4rem; color: #0F172A;'>Q{q_num}. {q_text}</h4>", unsafe_allow_html=True)
             
             c1, _ = st.columns([1, 4])
             if is_selected:
@@ -239,7 +248,6 @@ with col_selected:
     if not st.session_state.selected_q_indices:
         st.info("Use the sidebar counts to auto-generate a set, or click **Add +** on questions individually!")
     else:
-        # Maintain sorted order so exam questions flow logically
         st.session_state.selected_q_indices.sort()
         selected_df = df.loc[st.session_state.selected_q_indices].copy()
         
@@ -253,7 +261,7 @@ with col_selected:
         
         st.markdown("---")
         
-        # --- Word Document Generator (Matches Screenshot Style) ---
+        # --- Word Document Generator ---
         def generate_docx(selected_questions, is_answer_key=False):
             doc = docx.Document()
             
@@ -263,7 +271,7 @@ with col_selected:
             r = title.add_run(heading_text)
             r.bold = True
             r.font.size = Pt(22)
-            r.font.color.rgb = RGBColor(15, 118, 110) # Dark Teal / Blue Title
+            r.font.color.rgb = RGBColor(15, 118, 110)
             title.alignment = WD_ALIGN_PARAGRAPH.CENTER
             
             if not is_answer_key:
@@ -283,7 +291,7 @@ with col_selected:
                     r_txt = p_scen.add_run(scenario_text)
                     r_txt.font.italic = True
                 
-                # Image Embedding (Placed right under Scenario / Context, exactly like screenshot)
+                # Image Embedding
                 img_path = get_valid_image_path(row.get('Image File'))
                 if img_path:
                     doc.add_paragraph()
@@ -301,7 +309,7 @@ with col_selected:
                 q_text_val = get_cell_text(row.get('Question Text'))
                 p_q.add_run(q_text_val + "\n")
                 
-                # Choices (if multiple choice)
+                # Choices
                 for choice_col in ['Choice A', 'Choice B', 'Choice C', 'Choice D', 'Choice E']:
                     c_val = get_cell_text(row.get(choice_col))
                     if c_val:
