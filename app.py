@@ -1,318 +1,247 @@
 import streamlit as st
 import pandas as pd
-import random
+import docx
 import os
-from io import BytesIO
-from docx import Document
-from docx.shared import Inches, Pt
+from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from io import BytesIO
 
-# -----------------------------------------------------------------------------
-# PAGE CONFIGURATION & CUSTOM THEMING
-# -----------------------------------------------------------------------------
+# --- Page Configuration & Styling ---
 st.set_page_config(
-    page_title="TEDDI | Tagged Exam Database",
+    page_title="TEDDI - Exam Builder",
     page_icon="🧸",
     layout="wide"
 )
 
-# Custom CSS: Orchid, Turquoise, Dark Orange, and Baby Sky Blue
+# Custom Styling: Warm Mesh Gradient (Orange, Turquoise, Orchid)
 st.markdown("""
-    <style>
-    /* Main Background - Soft Baby Sky Blue Tint */
+<style>
+    /* Gradient Background mesh: Dark Orange, Turquoise, Orchid, Sky Blue */
     .stApp {
-        background-color: #F0F9FF;
+        background: linear-gradient(135deg, #FF7F3E 0%, #22D3EE 40%, #A855F7 75%, #38BDF8 100%) !important;
+        background-attachment: fixed !important;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
     
-    /* Header Banner - Orchid & Turquoise Gradient */
-    .teddi-header {
-        background: linear-gradient(135deg, #BA55D3 0%, #00CED1 100%);
-        padding: 2rem 2.5rem;
-        border-radius: 16px;
-        color: white;
+    /* Main Header Styling */
+    .main-header {
+        background: rgba(255, 255, 255, 0.92);
+        padding: 2rem;
+        border-radius: 20px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+        text-align: center;
         margin-bottom: 2rem;
-        box-shadow: 0 10px 20px -5px rgba(186, 85, 211, 0.3);
-        display: flex;
-        align-items: center;
-        gap: 1.5rem;
+        border: 2px solid rgba(255, 255, 255, 0.5);
     }
-    .teddi-header-text h1 {
-        color: white !important;
-        font-family: 'Inter', sans-serif;
+    
+    .main-header h1 {
+        color: #C2410C;
+        font-size: 2.8rem;
         font-weight: 800;
-        margin: 0;
-        font-size: 2.5rem;
-        text-shadow: 0 2px 4px rgba(0,0,0,0.15);
+        margin-bottom: 0.2rem;
     }
-    .teddi-header-text p {
-        color: #F0FDFA !important;
-        font-size: 1.1rem;
+    
+    .author-credit {
+        color: #0F766E;
+        font-size: 1.05rem;
+        font-weight: 600;
         margin-top: 0.3rem;
-        margin-bottom: 0;
+        margin-bottom: 0.8rem;
+    }
+    
+    .main-header p {
+        color: #6B21A8;
+        font-size: 1.1rem;
         font-weight: 500;
     }
-    .teddi-logo {
-        font-size: 3.8rem;
-        background: rgba(255, 255, 255, 0.2);
-        padding: 0.5rem 1rem;
+    
+    /* Question Cards */
+    .question-card {
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 15px;
+        padding: 1.5rem;
+        margin-bottom: 1.2rem;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+        border-left: 6px solid #FF7F3E;
+    }
+    
+    /* Tags */
+    .tag {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
         border-radius: 20px;
-        backdrop-filter: blur(5px);
+        font-size: 0.85rem;
+        font-weight: 600;
+        margin-right: 0.5rem;
     }
+    .tag-topic { background-color: #E0F2FE; color: #0369A1; }
+    .tag-blooms { background-color: #F3E8FF; color: #6B21A8; }
+    .tag-points { background-color: #FFEDD5; color: #C2410C; }
     
-    /* Sidebar Styling - Soft Baby Sky Blue */
-    section[data-testid="stSidebar"] {
-        background-color: #E0F2FE;
-        border-right: 1px solid #BAE6FD;
-    }
-    
-    /* Expandable Cards - Clean White with Turquoise Border on Hover */
-    div[data-testid="stExpander"] {
-        background-color: white !important;
-        border: 1px solid #BAE6FD !important;
-        border-radius: 12px !important;
-        margin-bottom: 0.8rem;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.03) !important;
-        transition: all 0.2s ease-in-out;
-    }
-    div[data-testid="stExpander"]:hover {
-        border-color: #00CED1 !important;
-        box-shadow: 0 4px 12px rgba(0,206,209,0.15) !important;
-    }
-    
-    /* Primary Buttons - Dark Orange */
-    button[kind="primary"], .stButton>button {
-        background-color: #FF8C00 !important;
+    /* Buttons */
+    .stButton>button {
+        background-color: #FF7F3E !important;
         color: white !important;
+        border-radius: 12px !important;
+        font-weight: 600 !important;
         border: none !important;
-        border-radius: 10px !important;
-        font-weight: 700 !important;
-        transition: transform 0.1s ease, background-color 0.2s !important;
+        box-shadow: 0 4px 10px rgba(255, 127, 62, 0.3) !important;
     }
-    button[kind="primary"]:hover, .stButton>button:hover {
-        background-color: #E07B00 !important;
-        transform: translateY(-1px);
+    .stButton>button:hover {
+        background-color: #E05D1B !important;
     }
-    </style>
+</style>
 """, unsafe_allow_html=True)
 
-# -----------------------------------------------------------------------------
-# HEADER BANNER
-# -----------------------------------------------------------------------------
+# --- App Header ---
 st.markdown("""
-    <div class="teddi-header">
-        <div class="teddi-logo">🧸</div>
-        <div class="teddi-header-text">
-            <h1>TEDDI</h1>
-            <p><b>Tagged Exam Database for Departmental Instruction</b> — Fast, intuitive, Bloom's-aligned test builder with embedded figure support.</p>
-        </div>
-    </div>
+<div class="main-header">
+    <h1>🧸 TEDDI - Exam Builder</h1>
+    <div class="author-credit">Created by Megan Mitchell, PhD Candidate in the Organismic and Evolutionary Biology Graduate Program</div>
+    <p>Select questions from the question bank to generate custom exams and answer keys instantly.</p>
+</div>
 """, unsafe_allow_html=True)
 
-# -----------------------------------------------------------------------------
-# LOAD DATA
-# -----------------------------------------------------------------------------
+# --- Load Data ---
 @st.cache_data
 def load_data():
-    try:
-        df = pd.read_csv("exam_questions_extracted.csv")
-        for col in df.columns:
-            df[col] = df[col].fillna("N/A")
-        return df
-    except Exception as e:
-        st.error(f"Error loading CSV file: {e}")
-        return pd.DataFrame()
+    df = pd.read_csv("exam_questions_extracted.csv")
+    return df
 
-df = load_data()
-
-if df.empty:
+try:
+    df = load_data()
+except Exception as e:
+    st.error(f"Error loading exam_questions_extracted.csv: {e}")
     st.stop()
 
-BLOOMS_COL = "Bloom's Taxonomy Level"
+# --- Sidebar Filters ---
+st.sidebar.header("🔍 Filter Question Bank")
 
-# -----------------------------------------------------------------------------
-# SESSION STATE SETUP (Exam Basket)
-# -----------------------------------------------------------------------------
-if "selected_indices" not in st.session_state:
-    st.session_state.selected_indices = set()
+# Topic Filter
+topics = sorted([t for t in df['Topic'].dropna().unique()])
+selected_topics = st.sidebar.multiselect("Select Topics", options=topics, default=topics)
 
-# -----------------------------------------------------------------------------
-# DOCX GENERATION HELPER FUNCTIONS
-# -----------------------------------------------------------------------------
-def generate_docx(selected_df, include_answers=False):
-    doc = Document()
+# Blooms Taxonomy Filter
+blooms = sorted([b for b in df['Blooms Taxonomy Level'].dropna().unique()])
+selected_blooms = st.sidebar.multiselect("Blooms Taxonomy", options=blooms, default=blooms)
+
+# Filter Dataframe
+filtered_df = df[
+    (df['Topic'].isin(selected_topics)) &
+    (df['Blooms Taxonomy Level'].isin(selected_blooms))
+]
+
+st.sidebar.markdown("---")
+st.sidebar.write(f"**Available Questions:** {len(filtered_df)} / {len(df)}")
+
+# --- Main Layout ---
+col_bank, col_selected = st.columns([1.2, 1])
+
+# Initialize Session State for Selected Questions
+if 'selected_q_ids' not in st.session_state:
+    st.session_state.selected_q_ids = []
+
+with col_bank:
+    st.subheader("📚 Question Bank")
     
-    title_text = "FINAL EXAM - ANSWER KEY" if include_answers else "FINAL EXAM"
-    title = doc.add_heading(title_text, level=1)
-    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    
-    if not include_answers:
-        doc.add_paragraph("Name: _______________________\t\tDate: _____________\n")
-    
-    doc.add_paragraph("Instructions: Answer all questions cleanly in the spaces provided.\n")
-    
-    grouped = selected_df.groupby("Parent Question Text", sort=False)
-    
-    q_num = 1
-    for parent_text, group in grouped:
-        if parent_text != "N/A" and len(str(parent_text).strip()) > 0:
-            doc.add_heading("Context / Scenario:", level=3)
-            p_context = doc.add_paragraph(str(parent_text))
-            p_context.runs[0].font.italic = True
-            doc.add_paragraph()
+    for idx, row in filtered_df.iterrows():
+        q_id = int(row['Question Number']) if pd.notnull(row['Question Number']) else idx
+        is_selected = q_id in st.session_state.selected_q_ids
         
-        # Check if parent group has an associated image
-        first_img = group["Image File"].iloc[0] if "Image File" in group.columns else "N/A"
-        if first_img != "N/A" and os.path.exists(f"images/{first_img}"):
-            try:
-                doc.add_paragraph().add_run().add_picture(f"images/{first_img}", width=Inches(4.5))
-            except Exception:
-                pass
-
-        for idx, row in group.iterrows():
-            q_type = row['Question Type']
-            b_level = row[BLOOMS_COL]
+        with st.container():
+            st.markdown(f"""
+            <div class="question-card">
+                <div>
+                    <span class="tag tag-points">{row.get('Points', 'N/A')} Points</span>
+                    <span class="tag tag-topic">{row.get('Topic', 'General')}</span>
+                    <span class="tag tag-blooms">Blooms Taxonomy: {row.get('Blooms Taxonomy Level', 'N/A')}</span>
+                </div>
+                <h4 style="margin-top: 0.8rem; color: #1E293B;">Q{q_id}. {row['Question Text']}</h4>
+            </div>
+            """, unsafe_allow_html=True)
             
-            q_p = doc.add_paragraph()
-            q_p.add_run(f"Q{q_num}. [{q_type} | {b_level}]\n").bold = True
-            q_p.add_run(f"{row['Question Part Text']}\n")
+            # Show Image if available
+            img_file = row.get('Image File')
+            if pd.notnull(img_file) and str(img_file).strip() != "":
+                img_path = str(img_file).strip()
+                if os.path.exists(img_path):
+                    st.image(img_path, width=350)
             
-            if include_answers:
-                ans_p = doc.add_paragraph()
-                ans_p.add_run(f"Correct Answer: {row['Answer Details']}").bold = True
+            c1, c2 = st.columns([1, 4])
+            if is_selected:
+                if c1.button("Remove", key=f"rem_{q_id}"):
+                    st.session_state.selected_q_ids.remove(q_id)
+                    st.rerun()
             else:
-                if q_type in ['Essay', 'Short Answer', 'Draw']:
-                    doc.add_paragraph("\n\n_________________________________________________________________________________\n" * 2)
-            
-            doc.add_paragraph()
-            q_num += 1
-            
-    buffer = BytesIO()
-    doc.save(buffer)
-    buffer.seek(0)
-    return buffer
+                if c1.button("Add +", key=f"add_{q_id}"):
+                    st.session_state.selected_q_ids.append(q_id)
+                    st.rerun()
+            st.markdown("---")
 
-# -----------------------------------------------------------------------------
-# SIDEBAR - AUTO-GENERATOR & EXPORT
-# -----------------------------------------------------------------------------
-st.sidebar.title("🧸 TEDDI Test Builder")
-
-basket_count = len(st.session_state.selected_indices)
-st.sidebar.metric(label="Selected Questions in Basket", value=basket_count)
-
-if basket_count > 0:
-    if st.sidebar.button("🗑️ Clear Basket", use_container_width=True):
-        st.session_state.selected_indices = set()
-        st.rerun()
-
-st.sidebar.markdown("---")
-st.sidebar.subheader("🎲 Auto-Generate Exam")
-
-blooms_levels = df[BLOOMS_COL].unique().tolist()
-blooms_targets = {}
-
-st.sidebar.caption("Set target question counts per Bloom's level:")
-for level in sorted(blooms_levels):
-    count_available = len(df[df[BLOOMS_COL] == level])
-    blooms_targets[level] = st.sidebar.number_input(
-        f"{level} (Max: {count_available})", 
-        min_value=0, 
-        max_value=count_available, 
-        value=0,
-        key=f"target_{level}"
-    )
-
-if st.sidebar.button("⚡ Auto-Select Questions", type="primary", use_container_width=True):
-    new_selection = set()
-    for level, target in blooms_targets.items():
-        if target > 0:
-            level_indices = df[df[BLOOMS_COL] == level].index.tolist()
-            sampled = random.sample(level_indices, min(target, len(level_indices)))
-            new_selection.update(sampled)
-    st.session_state.selected_indices = new_selection
-    st.sidebar.success(f"Selected {len(new_selection)} questions!")
-    st.rerun()
-
-st.sidebar.markdown("---")
-st.sidebar.subheader("📥 Export Test Documents")
-
-if len(st.session_state.selected_indices) > 0:
-    selected_df = df.loc[list(st.session_state.selected_indices)]
+with col_selected:
+    st.subheader(f"📋 Selected Exam Questions ({len(st.session_state.selected_q_ids)})")
     
-    student_docx = generate_docx(selected_df, include_answers=False)
-    st.sidebar.download_button(
-        label="📄 Download Student Exam (.docx)",
-        data=student_docx,
-        file_name="TEDDI_Student_Exam.docx",
-        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        use_container_width=True
-    )
-    
-    key_docx = generate_docx(selected_df, include_answers=True)
-    st.sidebar.download_button(
-        label="🔑 Download Answer Key (.docx)",
-        data=key_docx,
-        file_name="TEDDI_Teacher_Answer_Key.docx",
-        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        use_container_width=True
-    )
-else:
-    st.sidebar.info("Add questions to the basket to export docx files.")
-
-# -----------------------------------------------------------------------------
-# MAIN CONTENT - FILTERS & QUESTION TABLE
-# -----------------------------------------------------------------------------
-st.subheader("🔍 Explore Question Bank")
-
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    selected_blooms = st.multiselect("Filter by Bloom's Level", options=sorted(blooms_levels))
-with col2:
-    q_types = sorted(df["Question Type"].unique().tolist())
-    selected_types = st.multiselect("Filter by Question Type", options=q_types)
-with col3:
-    search_query = st.text_input("Search Text Keywords", value="", placeholder="e.g. Carbon, Heart, Hemoglobin...")
-
-filtered_df = df.copy()
-
-if selected_blooms:
-    filtered_df = filtered_df[filtered_df[BLOOMS_COL].isin(selected_blooms)]
-if selected_types:
-    filtered_df = filtered_df[filtered_df["Question Type"].isin(selected_types)]
-if search_query:
-    filtered_df = filtered_df[
-        filtered_df["Question Part Text"].str.contains(search_query, case=False) |
-        filtered_df["Parent Question Text"].str.contains(search_query, case=False) |
-        filtered_df["Part Name"].str.contains(search_query, case=False)
-    ]
-
-st.markdown(f"**Showing {len(filtered_df)} of {len(df)} total questions**")
-
-for idx, row in filtered_df.iterrows():
-    is_in_basket = idx in st.session_state.selected_indices
-    b_lvl = row[BLOOMS_COL]
-    q_typ = row['Question Type']
-    
-    card_title = f"{'✅ IN BASKET | ' if is_in_basket else ''}[{q_typ}] [{b_lvl}] — {row['Part Name']}"
-    
-    with st.expander(card_title):
-        if row['Parent Question Text'] != "N/A":
-            st.markdown(f"**📖 Context / Scenario:**\n> *{row['Parent Question Text']}*")
+    if not st.session_state.selected_q_ids:
+        st.info("Click **Add +** on any question from the bank to start building your exam!")
+    else:
+        selected_df = df[df['Question Number'].isin(st.session_state.selected_q_ids)].copy()
         
-        st.markdown(f"**❓ Question:** {row['Question Part Text']}")
-        st.markdown(f"**💡 Key / Answer:** `{row['Answer Details']}`")
-        
-        # Display extracted image if present
-        img_file = row.get("Image File", "N/A")
-        if img_file != "N/A" and os.path.exists(f"images/{img_file}"):
-            st.image(f"images/{img_file}", caption=row["Photo associated with the exam question if applicable"], width=450)
+        for idx, row in selected_df.iterrows():
+            q_id = int(row['Question Number'])
+            st.markdown(f"**Q{q_id}:** {row['Question Text']}")
+            if st.button("❌ Remove", key=f"sel_rem_{q_id}"):
+                st.session_state.selected_q_ids.remove(q_id)
+                st.rerun()
         
         st.markdown("---")
-        if is_in_basket:
-            if st.button("➖ Remove from Exam Basket", key=f"btn_rem_{idx}"):
-                st.session_state.selected_indices.remove(idx)
-                st.rerun()
-        else:
-            if st.button("➕ Add to Exam Basket", key=f"btn_add_{idx}"):
-                st.session_state.selected_indices.add(idx)
-                st.rerun()
+        
+        # --- Word Document (.docx) Export ---
+        def generate_docx(selected_questions):
+            doc = docx.Document()
+            
+            # Title
+            title = doc.add_paragraph()
+            r = title.add_run("BIOLOGY EXAM")
+            r.bold = True
+            r.font.size = Pt(20)
+            r.font.color.rgb = RGBColor(194, 65, 12)
+            title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            
+            p_sub = doc.add_paragraph("Name: ________________________   Date: ______________\n")
+            p_sub.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            
+            for i, (_, row) in enumerate(selected_questions.iterrows(), 1):
+                p_q = doc.add_paragraph()
+                r_q = p_q.add_run(f"Question {i} ({row.get('Points', 'N/A')} Points):\n")
+                r_q.bold = True
+                p_q.add_run(str(row['Question Text']) + "\n")
+                
+                # Choices
+                for col in ['Choice A', 'Choice B', 'Choice C', 'Choice D', 'Choice E']:
+                    if col in row and pd.notnull(row[col]) and str(row[col]).strip() != "":
+                        p_q.add_run(f"   [{col[-1]}] {row[col]}\n")
+                
+                # Image Embedding
+                img_file = row.get('Image File')
+                if pd.notnull(img_file) and str(img_file).strip() != "":
+                    img_path = str(img_file).strip()
+                    if os.path.exists(img_path):
+                        doc.add_paragraph()
+                        doc.add_picture(img_path, width=Inches(3.5))
+                        doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                
+                doc.add_paragraph("\n")
+                
+            buffer = BytesIO()
+            doc.save(buffer)
+            buffer.seek(0)
+            return buffer
+
+        docx_file = generate_docx(selected_df)
+        
+        st.download_button(
+            label="📥 Download Exam (.docx)",
+            data=docx_file,
+            file_name="TEDDI_Generated_Exam.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
