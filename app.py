@@ -1,9 +1,10 @@
 import streamlit as st
 import pandas as pd
 import random
+import os
 from io import BytesIO
 from docx import Document
-from docx.shared import Pt, Inches
+from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 # -----------------------------------------------------------------------------
@@ -15,66 +16,81 @@ st.set_page_config(
     layout="wide"
 )
 
-# Custom CSS for modern styling
+# Custom CSS: Orchid, Turquoise, Dark Orange, and Baby Sky Blue
 st.markdown("""
     <style>
-    /* Main Background & Fonts */
-    .main {
-        background-color: #F8FAFC;
+    /* Main Background - Soft Baby Sky Blue Tint */
+    .stApp {
+        background-color: #F0F9FF;
     }
     
-    /* Custom Header Banner */
+    /* Header Banner - Orchid & Turquoise Gradient */
     .teddi-header {
-        background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
-        padding: 1.8rem 2rem;
-        border-radius: 12px;
+        background: linear-gradient(135deg, #BA55D3 0%, #00CED1 100%);
+        padding: 2rem 2.5rem;
+        border-radius: 16px;
         color: white;
         margin-bottom: 2rem;
-        box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.2);
+        box-shadow: 0 10px 20px -5px rgba(186, 85, 211, 0.3);
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
     }
-    .teddi-header h1 {
+    .teddi-header-text h1 {
         color: white !important;
         font-family: 'Inter', sans-serif;
         font-weight: 800;
         margin: 0;
-        font-size: 2.2rem;
+        font-size: 2.5rem;
+        text-shadow: 0 2px 4px rgba(0,0,0,0.15);
     }
-    .teddi-header p {
-        color: #E0E7FF !important;
-        font-size: 1.05rem;
+    .teddi-header-text p {
+        color: #F0FDFA !important;
+        font-size: 1.1rem;
         margin-top: 0.3rem;
         margin-bottom: 0;
+        font-weight: 500;
+    }
+    .teddi-logo {
+        font-size: 3.8rem;
+        background: rgba(255, 255, 255, 0.2);
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        backdrop-filter: blur(5px);
     }
     
-    /* Stat / Count Badges */
-    .badge-card {
-        background-color: white;
-        border-radius: 10px;
-        padding: 1rem;
-        border-left: 5px solid #4F46E5;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.04);
-        margin-bottom: 1rem;
-    }
-    
-    /* Style Expandable Question Cards */
-    .st-emotion-cache-1h993ip, div[data-testid="stExpander"] {
-        background-color: white;
-        border: 1px solid #E2E8F0;
-        border-radius: 10px;
-        margin-bottom: 0.8rem;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.03);
-    }
-    
-    /* Custom Primary Buttons */
-    .stButton>button {
-        border-radius: 8px;
-        font-weight: 600;
-        transition: all 0.2s;
-    }
-    
-    /* Sidebar Styling */
+    /* Sidebar Styling - Soft Baby Sky Blue */
     section[data-testid="stSidebar"] {
-        background-color: #F1F5F9;
+        background-color: #E0F2FE;
+        border-right: 1px solid #BAE6FD;
+    }
+    
+    /* Expandable Cards - Clean White with Turquoise Border on Hover */
+    div[data-testid="stExpander"] {
+        background-color: white !important;
+        border: 1px solid #BAE6FD !important;
+        border-radius: 12px !important;
+        margin-bottom: 0.8rem;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.03) !important;
+        transition: all 0.2s ease-in-out;
+    }
+    div[data-testid="stExpander"]:hover {
+        border-color: #00CED1 !important;
+        box-shadow: 0 4px 12px rgba(0,206,209,0.15) !important;
+    }
+    
+    /* Primary Buttons - Dark Orange */
+    button[kind="primary"], .stButton>button {
+        background-color: #FF8C00 !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 10px !important;
+        font-weight: 700 !important;
+        transition: transform 0.1s ease, background-color 0.2s !important;
+    }
+    button[kind="primary"]:hover, .stButton>button:hover {
+        background-color: #E07B00 !important;
+        transform: translateY(-1px);
     }
     </style>
 """, unsafe_allow_html=True)
@@ -84,8 +100,11 @@ st.markdown("""
 # -----------------------------------------------------------------------------
 st.markdown("""
     <div class="teddi-header">
-        <h1>🧸 TEDDI</h1>
-        <p><b>Tagged Exam Database for Departmental Instruction</b> — Search, filter, and build custom exams aligned with Bloom's Taxonomy.</p>
+        <div class="teddi-logo">🧸</div>
+        <div class="teddi-header-text">
+            <h1>TEDDI</h1>
+            <p><b>Tagged Exam Database for Departmental Instruction</b> — Fast, intuitive, Bloom's-aligned test builder with embedded figure support.</p>
+        </div>
     </div>
 """, unsafe_allow_html=True)
 
@@ -141,6 +160,14 @@ def generate_docx(selected_df, include_answers=False):
             p_context.runs[0].font.italic = True
             doc.add_paragraph()
         
+        # Check if parent group has an associated image
+        first_img = group["Image File"].iloc[0] if "Image File" in group.columns else "N/A"
+        if first_img != "N/A" and os.path.exists(f"images/{first_img}"):
+            try:
+                doc.add_paragraph().add_run().add_picture(f"images/{first_img}", width=Inches(4.5))
+            except Exception:
+                pass
+
         for idx, row in group.iterrows():
             q_type = row['Question Type']
             b_level = row[BLOOMS_COL]
@@ -148,9 +175,6 @@ def generate_docx(selected_df, include_answers=False):
             q_p = doc.add_paragraph()
             q_p.add_run(f"Q{q_num}. [{q_type} | {b_level}]\n").bold = True
             q_p.add_run(f"{row['Question Part Text']}\n")
-            
-            if row['Photo associated with the exam question if applicable'] != "N/A":
-                q_p.add_run(f"[Associated Diagram/Image: {row['Photo associated with the exam question if applicable']}]\n").italic = True
             
             if include_answers:
                 ans_p = doc.add_paragraph()
@@ -170,10 +194,10 @@ def generate_docx(selected_df, include_answers=False):
 # -----------------------------------------------------------------------------
 # SIDEBAR - AUTO-GENERATOR & EXPORT
 # -----------------------------------------------------------------------------
-st.sidebar.title("🛠️ Exam Builder")
+st.sidebar.title("🧸 TEDDI Test Builder")
 
 basket_count = len(st.session_state.selected_indices)
-st.sidebar.metric(label="Questions in Exam Basket", value=basket_count)
+st.sidebar.metric(label="Selected Questions in Basket", value=basket_count)
 
 if basket_count > 0:
     if st.sidebar.button("🗑️ Clear Basket", use_container_width=True):
@@ -278,8 +302,10 @@ for idx, row in filtered_df.iterrows():
         st.markdown(f"**❓ Question:** {row['Question Part Text']}")
         st.markdown(f"**💡 Key / Answer:** `{row['Answer Details']}`")
         
-        if row['Photo associated with the exam question if applicable'] != "N/A":
-            st.warning(f"🖼️ **Diagram Reference:** {row['Photo associated with the exam question if applicable']}")
+        # Display extracted image if present
+        img_file = row.get("Image File", "N/A")
+        if img_file != "N/A" and os.path.exists(f"images/{img_file}"):
+            st.image(f"images/{img_file}", caption=row["Photo associated with the exam question if applicable"], width=450)
         
         st.markdown("---")
         if is_in_basket:
