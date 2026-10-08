@@ -14,7 +14,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Custom Styling: Turquoise, Orange, and Orchid Color Blocks
+# Custom Styling: Turquoise, Orange, and Orchid Accents
 st.markdown("""
 <style>
     .main-header {
@@ -62,13 +62,31 @@ st.markdown("""
 # --- Helper Function: Safely extract a single clean string from any cell ---
 def get_cell_text(val):
     if isinstance(val, pd.Series):
-        # If duplicate columns exist, pick the first non-empty value
         valid_vals = [str(x).strip() for x in val.dropna() if str(x).strip() not in ['', 'nan', 'N/A']]
         return valid_vals[0] if valid_vals else ""
     if pd.isnull(val):
         return ""
     str_val = str(val).strip()
     return "" if str_val in ['nan', 'N/A'] else str_val
+
+# --- Helper Function: Locate Image Path safely on any OS ---
+def get_valid_image_path(img_name):
+    clean_name = get_cell_text(img_name)
+    if not clean_name:
+        return None
+    
+    # Check direct path, images/ prefix, or base path
+    candidates = [
+        clean_name,
+        os.path.join("images", clean_name),
+        os.path.join("images", os.path.basename(clean_name)),
+        os.path.join(os.path.dirname(__file__), "images", os.path.basename(clean_name)) if '__file__' in globals() else ""
+    ]
+    
+    for path in candidates:
+        if path and os.path.exists(path) and os.path.isfile(path):
+            return path
+    return None
 
 # --- Load Data Safely ---
 @st.cache_data
@@ -104,6 +122,8 @@ def load_data():
             col_map[col] = 'Correct Answer'
         elif 'image' in c_lower and 'Image File' not in col_map.values():
             col_map[col] = 'Image File'
+        elif 'scenario' in c_lower or 'context' in c_lower:
+            col_map[col] = 'Context Scenario'
             
     df = df.rename(columns=col_map)
     
@@ -112,6 +132,7 @@ def load_data():
     if 'Blooms Taxonomy Level' not in df.columns: df['Blooms Taxonomy Level'] = 'N/A'
     if 'Points' not in df.columns: df['Points'] = '1'
     if 'Question Text' not in df.columns: df['Question Text'] = 'Question text missing'
+    if 'Context Scenario' not in df.columns: df['Context Scenario'] = ''
     
     df['Topic'] = df['Topic'].fillna('General').astype(str)
     df['Blooms Taxonomy Level'] = df['Blooms Taxonomy Level'].fillna('N/A').astype(str)
@@ -161,6 +182,8 @@ if st.sidebar.button("🎲 Generate Random Exam Set"):
             level_df = filtered_df[filtered_df['Blooms Taxonomy Level'] == b_level]
             sampled = level_df.sample(n=count, random_state=random.randint(1, 10000))
             sampled_indices.extend(sampled.index.tolist())
+    # Sort selected indices so questions appear in logical exam order
+    sampled_indices.sort()
     st.session_state.selected_q_indices = sampled_indices
     st.rerun()
 
@@ -174,6 +197,7 @@ with col_bank:
         is_selected = idx in st.session_state.selected_q_indices
         q_num = get_cell_text(row.get('Question Number')) or str(idx + 1)
         q_text = get_cell_text(row.get('Question Text'))
+        scenario_text = get_cell_text(row.get('Context Scenario'))
         pts = get_cell_text(row.get('Points')) or "1"
         top = get_cell_text(row.get('Topic')) or "General"
         blm = get_cell_text(row.get('Blooms Taxonomy Level')) or "N/A"
@@ -185,13 +209,17 @@ with col_bank:
                 <span class="tag tag-topic">Topic: {top}</span>
                 <span class="tag tag-blooms">Blooms: {blm}</span>
             </div>
-            <h4 style="margin-top: 0.6rem; color: #0F172A;">Q{q_num}. {q_text}</h4>
             """, unsafe_allow_html=True)
             
+            if scenario_text:
+                st.markdown(f"**Context / Scenario:** *{scenario_text}*")
+            
+            st.markdown(f"<h4 style='margin-top: 0.4rem; color: #0F172A;'>Q{q_num}. {q_text}</h4>", unsafe_allow_html=True)
+            
             # Display Image if available
-            img_file = get_cell_text(row.get('Image File'))
-            if img_file and os.path.exists(img_file):
-                st.image(img_file, width=320)
+            img_path = get_valid_image_path(row.get('Image File'))
+            if img_path:
+                st.image(img_path, width=340)
             
             c1, _ = st.columns([1, 4])
             if is_selected:
@@ -201,6 +229,7 @@ with col_bank:
             else:
                 if c1.button("Add +", key=f"add_{idx}"):
                     st.session_state.selected_q_indices.append(idx)
+                    st.session_state.selected_q_indices.sort()
                     st.rerun()
             st.markdown("---")
 
@@ -210,6 +239,8 @@ with col_selected:
     if not st.session_state.selected_q_indices:
         st.info("Use the sidebar counts to auto-generate a set, or click **Add +** on questions individually!")
     else:
+        # Maintain sorted order so exam questions flow logically
+        st.session_state.selected_q_indices.sort()
         selected_df = df.loc[st.session_state.selected_q_indices].copy()
         
         for idx, row in selected_df.iterrows():
@@ -222,32 +253,55 @@ with col_selected:
         
         st.markdown("---")
         
-        # --- Word Document Generator ---
+        # --- Word Document Generator (Matches Screenshot Style) ---
         def generate_docx(selected_questions, is_answer_key=False):
             doc = docx.Document()
             
+            # Title
             title = doc.add_paragraph()
-            heading_text = "BIOLOGY EXAM - ANSWER KEY" if is_answer_key else "BIOLOGY EXAM"
+            heading_text = "FINAL EXAM - ANSWER KEY" if is_answer_key else "FINAL EXAM"
             r = title.add_run(heading_text)
             r.bold = True
-            r.font.size = Pt(20)
-            r.font.color.rgb = RGBColor(139, 92, 246) # Orchid
+            r.font.size = Pt(22)
+            r.font.color.rgb = RGBColor(15, 118, 110) # Dark Teal / Blue Title
             title.alignment = WD_ALIGN_PARAGRAPH.CENTER
             
             if not is_answer_key:
                 p_sub = doc.add_paragraph("Name: ________________________   Date: ______________\n")
-                p_sub.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                p_sub.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                
+                p_inst = doc.add_paragraph("Instructions: Answer all questions cleanly in the spaces provided.\n")
+                p_inst.runs[0].font.italic = True
             
             for i, (_, row) in enumerate(selected_questions.iterrows(), 1):
+                scenario_text = get_cell_text(row.get('Context Scenario'))
+                if scenario_text:
+                    p_scen = doc.add_paragraph()
+                    r_lbl = p_scen.add_run("Context / Scenario:\n")
+                    r_lbl.bold = True
+                    r_lbl.font.color.rgb = RGBColor(15, 118, 110)
+                    r_txt = p_scen.add_run(scenario_text)
+                    r_txt.font.italic = True
+                
+                # Image Embedding (Placed right under Scenario / Context, exactly like screenshot)
+                img_path = get_valid_image_path(row.get('Image File'))
+                if img_path:
+                    doc.add_paragraph()
+                    doc.add_picture(img_path, width=Inches(4.5))
+                    doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.LEFT
+                
+                # Question Line
                 p_q = doc.add_paragraph()
                 pts = get_cell_text(row.get('Points')) or "1"
-                r_q = p_q.add_run(f"Question {i} ({pts} Points):\n")
-                r_q.bold = True
+                blm = get_cell_text(row.get('Blooms Taxonomy Level')) or "Remember"
+                
+                r_qnum = p_q.add_run(f"Q{i}. [{blm}] ")
+                r_qnum.bold = True
                 
                 q_text_val = get_cell_text(row.get('Question Text'))
                 p_q.add_run(q_text_val + "\n")
                 
-                # Choices
+                # Choices (if multiple choice)
                 for choice_col in ['Choice A', 'Choice B', 'Choice C', 'Choice D', 'Choice E']:
                     c_val = get_cell_text(row.get(choice_col))
                     if c_val:
@@ -260,14 +314,7 @@ with col_selected:
                         p_ans = doc.add_paragraph()
                         r_ans = p_ans.add_run(f"   --> CORRECT ANSWER: {ans_val}")
                         r_ans.bold = True
-                        r_ans.font.color.rgb = RGBColor(6, 182, 212) # Turquoise
-                
-                # Image Embedding
-                img_file = get_cell_text(row.get('Image File'))
-                if img_file and os.path.exists(img_file):
-                    doc.add_paragraph()
-                    doc.add_picture(img_file, width=Inches(3.5))
-                    doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        r_ans.font.color.rgb = RGBColor(6, 182, 212)
                 
                 doc.add_paragraph("\n")
                 
@@ -283,7 +330,7 @@ with col_selected:
         col_ex.download_button(
             label="📄 Download Exam (.docx)",
             data=exam_docx,
-            file_name="TEDDI_Exam.docx",
+            file_name="TEDDI_Final_Exam.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
         
