@@ -59,31 +59,55 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+# --- Helper Function: Safely extract a single clean string from any cell ---
+def get_cell_text(val):
+    if isinstance(val, pd.Series):
+        # If duplicate columns exist, pick the first non-empty value
+        valid_vals = [str(x).strip() for x in val.dropna() if str(x).strip() not in ['', 'nan', 'N/A']]
+        return valid_vals[0] if valid_vals else ""
+    if pd.isnull(val):
+        return ""
+    str_val = str(val).strip()
+    return "" if str_val in ['nan', 'N/A'] else str_val
+
 # --- Load Data Safely ---
 @st.cache_data
 def load_data():
     df = pd.read_csv("exam_questions_extracted.csv")
     
-    # Normalize column names
+    # Deduplicate column names if CSV has duplicate headers
+    cols = []
+    counts = {}
+    for col in df.columns:
+        c_clean = col.strip()
+        if c_clean in counts:
+            counts[c_clean] += 1
+            cols.append(f"{c_clean}_{counts[c_clean]}")
+        else:
+            counts[c_clean] = 0
+            cols.append(c_clean)
+    df.columns = cols
+    
+    # Standardize column mapping
     col_map = {}
     for col in df.columns:
-        c_clean = col.strip().lower()
-        if 'topic' in c_clean:
+        c_lower = col.lower()
+        if 'topic' in c_lower and 'Topic' not in col_map.values():
             col_map[col] = 'Topic'
-        elif 'bloom' in c_clean:
+        elif 'bloom' in c_lower and 'Blooms Taxonomy Level' not in col_map.values():
             col_map[col] = 'Blooms Taxonomy Level'
-        elif 'question' in c_clean and 'text' in c_clean:
+        elif 'question' in c_lower and 'text' in c_lower and 'Question Text' not in col_map.values():
             col_map[col] = 'Question Text'
-        elif 'point' in c_clean:
+        elif 'point' in c_lower and 'Points' not in col_map.values():
             col_map[col] = 'Points'
-        elif 'correct' in c_clean or 'answer' in c_clean:
+        elif ('correct' in c_lower or 'answer' in c_lower) and 'Correct Answer' not in col_map.values():
             col_map[col] = 'Correct Answer'
-        elif 'image' in c_clean:
+        elif 'image' in c_lower and 'Image File' not in col_map.values():
             col_map[col] = 'Image File'
             
     df = df.rename(columns=col_map)
     
-    # Ensure standard column names and string types
+    # Ensure fallbacks exist
     if 'Topic' not in df.columns: df['Topic'] = 'General'
     if 'Blooms Taxonomy Level' not in df.columns: df['Blooms Taxonomy Level'] = 'N/A'
     if 'Points' not in df.columns: df['Points'] = '1'
@@ -91,7 +115,6 @@ def load_data():
     
     df['Topic'] = df['Topic'].fillna('General').astype(str)
     df['Blooms Taxonomy Level'] = df['Blooms Taxonomy Level'].fillna('N/A').astype(str)
-    df['Question Text'] = df['Question Text'].fillna('').astype(str)
     
     return df
 
@@ -101,7 +124,7 @@ except Exception as e:
     st.error(f"Error loading CSV file: {e}")
     st.stop()
 
-# --- Sidebar Configuration ---
+# --- Sidebar Filters ---
 st.sidebar.header("🔍 Exam Criteria & Filters")
 
 # Topic Multiselect
@@ -130,7 +153,7 @@ for b_level in blooms_levels:
 if 'selected_q_indices' not in st.session_state:
     st.session_state.selected_q_indices = []
 
-# Button to auto-generate random set based on category counts
+# Auto-generate random set based on category counts
 if st.sidebar.button("🎲 Generate Random Exam Set"):
     sampled_indices = []
     for b_level, count in blooms_counts.items():
@@ -149,25 +172,26 @@ with col_bank:
     
     for idx, row in filtered_df.iterrows():
         is_selected = idx in st.session_state.selected_q_indices
-        q_num = row['Question Number'] if 'Question Number' in row and pd.notnull(row['Question Number']) else idx + 1
-        q_text = str(row['Question Text'])
+        q_num = get_cell_text(row.get('Question Number')) or str(idx + 1)
+        q_text = get_cell_text(row.get('Question Text'))
+        pts = get_cell_text(row.get('Points')) or "1"
+        top = get_cell_text(row.get('Topic')) or "General"
+        blm = get_cell_text(row.get('Blooms Taxonomy Level')) or "N/A"
         
         with st.container():
             st.markdown(f"""
             <div>
-                <span class="tag tag-points">{row.get('Points', '1')} Points</span>
-                <span class="tag tag-topic">Topic: {row.get('Topic', 'General')}</span>
-                <span class="tag tag-blooms">Blooms: {row.get('Blooms Taxonomy Level', 'N/A')}</span>
+                <span class="tag tag-points">{pts} Points</span>
+                <span class="tag tag-topic">Topic: {top}</span>
+                <span class="tag tag-blooms">Blooms: {blm}</span>
             </div>
             <h4 style="margin-top: 0.6rem; color: #0F172A;">Q{q_num}. {q_text}</h4>
             """, unsafe_allow_html=True)
             
             # Display Image if available
-            img_file = row.get('Image File')
-            if pd.notnull(img_file) and str(img_file).strip() not in ['', 'nan', 'N/A']:
-                img_path = str(img_file).strip()
-                if os.path.exists(img_path):
-                    st.image(img_path, width=320)
+            img_file = get_cell_text(row.get('Image File'))
+            if img_file and os.path.exists(img_file):
+                st.image(img_file, width=320)
             
             c1, _ = st.columns([1, 4])
             if is_selected:
@@ -189,8 +213,9 @@ with col_selected:
         selected_df = df.loc[st.session_state.selected_q_indices].copy()
         
         for idx, row in selected_df.iterrows():
-            q_num = row['Question Number'] if 'Question Number' in row and pd.notnull(row['Question Number']) else idx + 1
-            st.markdown(f"**Q{q_num}:** {row['Question Text']}")
+            q_num = get_cell_text(row.get('Question Number')) or str(idx + 1)
+            q_text = get_cell_text(row.get('Question Text'))
+            st.markdown(f"**Q{q_num}:** {q_text}")
             if st.button("❌ Remove", key=f"sel_rem_{idx}"):
                 st.session_state.selected_q_indices.remove(idx)
                 st.rerun()
@@ -215,33 +240,34 @@ with col_selected:
             
             for i, (_, row) in enumerate(selected_questions.iterrows(), 1):
                 p_q = doc.add_paragraph()
-                r_q = p_q.add_run(f"Question {i} ({row.get('Points', '1')} Points):\n")
+                pts = get_cell_text(row.get('Points')) or "1"
+                r_q = p_q.add_run(f"Question {i} ({pts} Points):\n")
                 r_q.bold = True
                 
-                # Clean String Extraction (Fixes "Name: 2, dtype: str" cutoff bug)
-                q_text_val = str(row['Question Text'])
+                q_text_val = get_cell_text(row.get('Question Text'))
                 p_q.add_run(q_text_val + "\n")
                 
                 # Choices
-                for col in ['Choice A', 'Choice B', 'Choice C', 'Choice D', 'Choice E']:
-                    if col in row and pd.notnull(row[col]) and str(row[col]).strip() not in ['', 'nan']:
-                        p_q.add_run(f"   [{col[-1]}] {str(row[col])}\n")
+                for choice_col in ['Choice A', 'Choice B', 'Choice C', 'Choice D', 'Choice E']:
+                    c_val = get_cell_text(row.get(choice_col))
+                    if c_val:
+                        p_q.add_run(f"   [{choice_col[-1]}] {c_val}\n")
                 
                 # Correct Answer for Answer Key
-                if is_answer_key and 'Correct Answer' in row and pd.notnull(row['Correct Answer']):
-                    p_ans = doc.add_paragraph()
-                    r_ans = p_ans.add_run(f"   --> CORRECT ANSWER: {str(row['Correct Answer'])}")
-                    r_ans.bold = True
-                    r_ans.font.color.rgb = RGBColor(6, 182, 212) # Turquoise
+                if is_answer_key:
+                    ans_val = get_cell_text(row.get('Correct Answer'))
+                    if ans_val:
+                        p_ans = doc.add_paragraph()
+                        r_ans = p_ans.add_run(f"   --> CORRECT ANSWER: {ans_val}")
+                        r_ans.bold = True
+                        r_ans.font.color.rgb = RGBColor(6, 182, 212) # Turquoise
                 
                 # Image Embedding
-                img_file = row.get('Image File')
-                if pd.notnull(img_file) and str(img_file).strip() not in ['', 'nan', 'N/A']:
-                    img_path = str(img_file).strip()
-                    if os.path.exists(img_path):
-                        doc.add_paragraph()
-                        doc.add_picture(img_path, width=Inches(3.5))
-                        doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                img_file = get_cell_text(row.get('Image File'))
+                if img_file and os.path.exists(img_file):
+                    doc.add_paragraph()
+                    doc.add_picture(img_file, width=Inches(3.5))
+                    doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
                 
                 doc.add_paragraph("\n")
                 
