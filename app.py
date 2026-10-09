@@ -34,65 +34,48 @@ for candidate in ["IMAGES/bear_silhouette.png", "images/bear_silhouette.png", "b
 
 logo_b64 = get_image_base64(logo_path) if logo_path else None
 
-# Custom CSS: High-Contrast Color Block Palette (Orchid, Turquoise, Orange, Neutral White)
+# Custom CSS
 st.markdown("""
     <style>
-    .stApp { 
-        background-color: #FFFFFF !important; 
-    }
+    .stApp { background-color: #F0F9FF; }
     .teddi-header {
-        background-color: #9333EA !important;
+        background: linear-gradient(135deg, #BA55D3 0%, #00CED1 100%);
         padding: 1.8rem 2rem;
         border-radius: 16px;
-        color: #FFFFFF !important;
+        color: white;
         margin-bottom: 2rem;
         display: flex;
         align-items: center;
         gap: 1.5rem;
-        box-shadow: 0 4px 14px rgba(147, 51, 234, 0.25);
     }
     .teddi-header-text h1 {
-        color: #FFFFFF !important;
-        font-family: 'Inter', system-ui, sans-serif;
+        color: white !important;
+        font-family: 'Inter', sans-serif;
         font-weight: 800;
         margin: 0;
         font-size: 2.3rem;
     }
     .teddi-header-text p {
-        color: #F3E8FF !important;
+        color: #F0FDFA !important;
         font-size: 1.05rem;
         margin-top: 0.2rem;
         margin-bottom: 0;
     }
     section[data-testid="stSidebar"] {
-        background-color: #F0F9FF !important;
-        border-right: 3px solid #06B6D4 !important;
+        background-color: #E0F2FE;
+        border-right: 1px solid #BAE6FD;
     }
     div[data-testid="stExpander"] {
-        background-color: #FFFFFF !important;
-        border: 1px solid #E2E8F0 !important;
-        border-left: 6px solid #9333EA !important;
+        background-color: white !important;
+        border: 1px solid #BAE6FD !important;
         border-radius: 12px !important;
         margin-bottom: 0.8rem;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04) !important;
-    }
-    div[data-testid="stExpander"]:hover {
-        border-color: #06B6D4 !important;
-        border-left: 6px solid #06B6D4 !important;
     }
     button[kind="primary"], .stButton>button {
-        background-color: #FF7F3E !important;
-        color: #FFFFFF !important;
+        background-color: #FF8C00 !important;
+        color: white !important;
         border: none !important;
         border-radius: 10px !important;
-        font-weight: 700 !important;
-        transition: background-color 0.2s ease !important;
-    }
-    button[kind="primary"]:hover, .stButton>button:hover {
-        background-color: #E05D1B !important;
-    }
-    h3, .stSubheader {
-        color: #0F172A !important;
         font-weight: 700 !important;
     }
     </style>
@@ -353,4 +336,41 @@ if search_query:
         filtered_df[p_col].astype(str).str.contains(search_query, case=False)
     ]
 
-st.markdown
+st.markdown(f"**Showing {len(filtered_df)} of {len(df)} total questions**")
+
+for idx, row in filtered_df.iterrows():
+    is_in_basket = idx in st.session_state.selected_indices
+    b_lvl = row.get(BLOOMS_COL, 'N/A')
+    q_typ = row.get('Question Type', 'Question')
+    part_nm = row.get('Part Name', f"Q{idx+1}")
+
+    card_label = f"{'[IN BASKET] ' if is_in_basket else ''}[{q_typ}] [{b_lvl}] - {part_nm}"
+
+    with st.expander(card_label):
+        parent_txt = row.get('Parent Question Text', 'N/A')
+        if parent_txt != "N/A":
+            st.markdown(f"**Scenario:**\n> *{parent_txt}*")
+
+        q_txt = row.get('Question Part Text', row.get('Question Text', ''))
+        ans_txt = row.get('Answer Details', row.get('Correct Answer', 'N/A'))
+        
+        st.markdown(f"**Question:** {q_txt}")
+        st.markdown(f"**Key / Answer:** `{ans_txt}`")
+
+        img_path = resolve_image_path(row.get("Image File", "N/A"))
+        if img_path:
+            st.image(img_path, width=450)
+
+        st.markdown("---")
+        if is_in_basket:
+            if st.button("Remove from Exam Basket", key=f"btn_rem_{idx}"):
+                st.session_state.selected_indices.remove(idx)
+                st.rerun()
+        else:
+            if st.button("Add to Exam Basket", key=f"btn_add_{idx}"):
+                if parent_txt != "N/A" and len(str(parent_txt).strip()) > 0 and "Parent Question Text" in df.columns:
+                    sibling_indices = df[df["Parent Question Text"] == parent_txt].index.tolist()
+                    st.session_state.selected_indices.update(sibling_indices)
+                else:
+                    st.session_state.selected_indices.add(idx)
+                st.rerun()
