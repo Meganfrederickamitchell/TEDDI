@@ -223,7 +223,7 @@ def generate_docx(selected_df, include_answers=False):
 # SIDEBAR
 # -----------------------------------------------------------------------------
 sidebar_logo = f'<img src="{logo_b64}" width="30" style="margin-right: 8px;">' if logo_b64 else ''
-st.sidebar.markdown(f"### {sidebar_logo} TEDDI Test Builder", unsafe_allow_html=True)
+st.sidebar.markdown(f"### {sidebar_logo} TEDDIE Test Builder", unsafe_allow_html=True)
 
 basket_count = len(st.session_state.selected_indices)
 st.sidebar.metric(label="Questions in Basket", value=basket_count)
@@ -279,7 +279,7 @@ if len(st.session_state.selected_indices) > 0:
     st.sidebar.download_button(
         label="📄 Download Student Exam (.docx)",
         data=student_docx,
-        file_name="TEDDI_Student_Exam.docx",
+        file_name="TEDDIE_Student_Exam.docx",
         mime=DOCX_MIME,
         use_container_width=True
     )
@@ -288,7 +288,7 @@ if len(st.session_state.selected_indices) > 0:
     st.sidebar.download_button(
         label="🔑 Download Answer Key (.docx)",
         data=key_docx,
-        file_name="TEDDI_Teacher_Answer_Key.docx",
+        file_name="TEDDIE_Teacher_Answer_Key.docx",
         mime=DOCX_MIME,
         use_container_width=True
     )
