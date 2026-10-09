@@ -8,7 +8,7 @@ from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 # -----------------------------------------------------------------------------
-# PAGE CONFIGURATION
+# PAGE CONFIG
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="TEDDI | Tagged Exam Database",
@@ -22,29 +22,26 @@ st.markdown("""
     .stApp { background-color: #F0F9FF; }
     .teddi-header {
         background: linear-gradient(135deg, #BA55D3 0%, #00CED1 100%);
-        padding: 2rem 2.5rem;
+        padding: 1.8rem 2rem;
         border-radius: 16px;
         color: white;
         margin-bottom: 2rem;
-        box-shadow: 0 10px 20px -5px rgba(186, 85, 211, 0.3);
         display: flex;
         align-items: center;
-        gap: 1.5rem;
+        gap: 1.2rem;
     }
     .teddi-header-text h1 {
         color: white !important;
         font-family: 'Inter', sans-serif;
         font-weight: 800;
         margin: 0;
-        font-size: 2.5rem;
-        text-shadow: 0 2px 4px rgba(0,0,0,0.15);
+        font-size: 2.3rem;
     }
     .teddi-header-text p {
         color: #F0FDFA !important;
-        font-size: 1.1rem;
-        margin-top: 0.3rem;
+        font-size: 1.05rem;
+        margin-top: 0.2rem;
         margin-bottom: 0;
-        font-weight: 500;
     }
     section[data-testid="stSidebar"] {
         background-color: #E0F2FE;
@@ -55,12 +52,6 @@ st.markdown("""
         border: 1px solid #BAE6FD !important;
         border-radius: 12px !important;
         margin-bottom: 0.8rem;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.03) !important;
-        transition: all 0.2s ease-in-out;
-    }
-    div[data-testid="stExpander"]:hover {
-        border-color: #00CED1 !important;
-        box-shadow: 0 4px 12px rgba(0,206,209,0.15) !important;
     }
     button[kind="primary"], .stButton>button {
         background-color: #FF8C00 !important;
@@ -68,11 +59,6 @@ st.markdown("""
         border: none !important;
         border-radius: 10px !important;
         font-weight: 700 !important;
-        transition: transform 0.1s ease, background-color 0.2s !important;
-    }
-    button[kind="primary"]:hover, .stButton>button:hover {
-        background-color: #E07B00 !important;
-        transform: translateY(-1px);
     }
     </style>
 """, unsafe_allow_html=True)
@@ -82,42 +68,31 @@ st.markdown("""
 # -----------------------------------------------------------------------------
 st.markdown("""
     <div class="teddi-header">
-        <div style="font-size: 3.5rem;">🐻</div>
+        <div style="font-size: 3.2rem;">🐻</div>
         <div class="teddi-header-text">
             <h1>TEDDIE</h1>
-            <p><b>Tagged Exam Database for Departmental Instruction and Evaluation</b> — Fast, intuitive, Bloom's Taxonomy aligned test builder with embedded figure support.</p>
+            <p><b>Tagged Exam Database for Departmental Instruction</b> — Fast, Bloom's Taxonomy aligned test builder.</p>
         </div>
     </div>
 """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# LOAD DATA (With Safe Path Resolution)
+# LOAD DATA
 # -----------------------------------------------------------------------------
 @st.cache_data
 def load_data():
-    csv_candidates = [
-        "exam_questions_extracted.csv",
-        os.path.join(os.getcwd(), "exam_questions_extracted.csv"),
-        os.path.join(os.path.dirname(__file__), "exam_questions_extracted.csv") if '__file__' in globals() else ""
-    ]
-    
-    csv_path = None
-    for cand in csv_candidates:
-        if cand and os.path.exists(cand):
-            csv_path = cand
-            break
-            
-    if not csv_path:
-        st.error("⚠️ `exam_questions_extracted.csv` was not found in the root directory. Please verify file upload on GitHub.")
+    csv_file = "exam_questions_extracted.csv"
+    if not os.path.exists(csv_file):
+        st.error("⚠️ CSV file not found!")
         return pd.DataFrame()
 
     try:
-        df = pd.read_csv(csv_path)
+        df = pd.read_csv(csv_file)
         for col in df.columns:
             df[col] = df[col].fillna("N/A")
         return df
     except Exception as e:
-        st.error(f"Error reading CSV file: {e}")
+        st.error(f"Error loading CSV: {e}")
         return pd.DataFrame()
 
 df = load_data()
@@ -125,7 +100,6 @@ df = load_data()
 if df.empty:
     st.stop()
 
-# Auto-detect Blooms Taxonomy column name
 BLOOMS_COL = "Bloom's Taxonomy Level"
 if BLOOMS_COL not in df.columns:
     for c in df.columns:
@@ -136,28 +110,30 @@ if BLOOMS_COL not in df.columns:
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 # -----------------------------------------------------------------------------
-# SESSION STATE SETUP (Exam Basket)
+# SESSION STATE SETUP
 # -----------------------------------------------------------------------------
 if "selected_indices" not in st.session_state:
     st.session_state.selected_indices = set()
 
-# Helper function to resolve image path cleanly
-def resolve_image_path(raw_img_val):
-    if raw_img_val == "N/A" or pd.isnull(raw_img_val):
+# Helper function to resolve image paths across both 'images' and 'IMAGES' folders
+def resolve_image_path(raw_img):
+    if raw_img == "N/A" or pd.isnull(raw_img):
         return None
-    clean_val = str(raw_img_val).strip()
+    clean_val = str(raw_img).strip()
+    base_name = os.path.basename(clean_val)
     
-    base_filename = os.path.basename(clean_val)
     candidates = [
         clean_val,
-        base_filename,
-        os.path.join("images", base_filename),
-        os.path.join(os.getcwd(), "images", base_filename)
+        base_name,
+        os.path.join("images", base_name),
+        os.path.join("IMAGES", base_name),
+        os.path.join(os.getcwd(), "images", base_name),
+        os.path.join(os.getcwd(), "IMAGES", base_name)
     ]
     
-    for candidate in candidates:
-        if candidate and os.path.exists(candidate) and os.path.isfile(candidate):
-            return candidate
+    for cand in candidates:
+        if cand and os.path.exists(cand) and os.path.isfile(cand):
+            return cand
     return None
 
 # -----------------------------------------------------------------------------
@@ -176,7 +152,6 @@ def generate_docx(selected_df, include_answers=False):
     doc.add_paragraph("Instructions: Answer all questions cleanly in the spaces provided.\n")
 
     selected_df = selected_df.sort_index()
-    
     parent_col = "Parent Question Text" if "Parent Question Text" in selected_df.columns else selected_df.columns[0]
     grouped = selected_df.groupby(parent_col, sort=False)
 
@@ -209,10 +184,11 @@ def generate_docx(selected_df, include_answers=False):
 
             if include_answers:
                 ans_p = doc.add_paragraph()
-                ans_p.add_run(f"Correct Answer: {row.get('Answer Details', row.get('Correct Answer', 'N/A'))}").bold = True
+                ans_val = row.get('Answer Details', row.get('Correct Answer', 'N/A'))
+                ans_p.add_run(f"Correct Answer: {ans_val}").bold = True
             else:
                 if q_type in ['Essay', 'Short Answer', 'Draw']:
-                    doc.add_paragraph("\n\n" + "_"*81 + "\n" + "_"*81 + "\n")
+                    doc.add_paragraph("\n\n" + "_"*80 + "\n" + "_"*80 + "\n")
 
             doc.add_paragraph()
             q_num += 1
@@ -223,12 +199,12 @@ def generate_docx(selected_df, include_answers=False):
     return buffer
 
 # -----------------------------------------------------------------------------
-# SIDEBAR - AUTO-GENERATOR & EXPORT
+# SIDEBAR
 # -----------------------------------------------------------------------------
 st.sidebar.title("🧸 TEDDI Test Builder")
 
 basket_count = len(st.session_state.selected_indices)
-st.sidebar.metric(label="Selected Questions in Basket", value=basket_count)
+st.sidebar.metric(label="Questions in Basket", value=basket_count)
 
 if basket_count > 0:
     if st.sidebar.button("🗑️ Clear Basket", use_container_width=True):
@@ -310,7 +286,7 @@ with col2:
     q_types = sorted(df["Question Type"].unique().tolist()) if "Question Type" in df.columns else []
     selected_types = st.multiselect("Filter by Question Type", options=q_types)
 with col3:
-    search_query = st.text_input("Search Text Keywords", value="", placeholder="e.g. Carbon, Heart, Hemoglobin...")
+    search_query = st.text_input("Search Keywords", value="", placeholder="e.g. Carbon, Heart...")
 
 filtered_df = df.copy()
 
@@ -332,8 +308,4 @@ for idx, row in filtered_df.iterrows():
     is_in_basket = idx in st.session_state.selected_indices
     b_lvl = row.get(BLOOMS_COL, 'N/A')
     q_typ = row.get('Question Type', 'Question')
-    part_nm = row.get('Part Name', f"Q{idx+1}")
-
-    card_title = f"{'✅ IN BASKET | ' if is_in_basket else ''}[{q_typ}] [{b_lvl}] — {part_nm}"
-
-    with st.expander(card
+    part_nm = row.get
