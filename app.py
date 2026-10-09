@@ -19,15 +19,10 @@ st.set_page_config(
 # Base64 string for the bear silhouette logo
 BEAR_LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAYAAACtWK6eAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAA_SURBVHhe7dBBAYAAAMAgGP3D2oI9XMAGm4YFAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAu4sXkAAf0m4Y4wAAAABJRU5ErkJggg=="
 
-# Custom CSS: Orchid, Turquoise, Dark Orange, and Baby Sky Blue
+# Custom CSS
 st.markdown("""
     <style>
-    /* Main Background - Soft Baby Sky Blue Tint */
-    .stApp {
-        background-color: #F0F9FF;
-    }
-
-    /* Header Banner - Orchid & Turquoise Gradient */
+    .stApp { background-color: #F0F9FF; }
     .teddi-header {
         background: linear-gradient(135deg, #BA55D3 0%, #00CED1 100%);
         padding: 2rem 2.5rem;
@@ -54,14 +49,10 @@ st.markdown("""
         margin-bottom: 0;
         font-weight: 500;
     }
-
-    /* Sidebar Styling - Soft Baby Sky Blue */
     section[data-testid="stSidebar"] {
         background-color: #E0F2FE;
         border-right: 1px solid #BAE6FD;
     }
-
-    /* Expandable Cards - Clean White with Turquoise Border on Hover */
     div[data-testid="stExpander"] {
         background-color: white !important;
         border: 1px solid #BAE6FD !important;
@@ -74,8 +65,6 @@ st.markdown("""
         border-color: #00CED1 !important;
         box-shadow: 0 4px 12px rgba(0,206,209,0.15) !important;
     }
-
-    /* Primary Buttons - Dark Orange */
     button[kind="primary"], .stButton>button {
         background-color: #FF8C00 !important;
         color: white !important;
@@ -126,6 +115,7 @@ if df.empty:
     st.stop()
 
 BLOOMS_COL = "Bloom's Taxonomy Level"
+DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 # -----------------------------------------------------------------------------
 # SESSION STATE SETUP (Exam Basket)
@@ -140,9 +130,9 @@ def resolve_image_path(raw_img_val):
     clean_val = str(raw_img_val).strip()
     
     candidates = [
-        clean_val,                                           # images/filename.png
-        os.path.basename(clean_val),                        # filename.png
-        os.path.join("images", os.path.basename(clean_val))  # images/filename.png
+        clean_val,
+        os.path.basename(clean_val),
+        os.path.join("images", os.path.basename(clean_val))
     ]
     
     for candidate in candidates:
@@ -165,9 +155,7 @@ def generate_docx(selected_df, include_answers=False):
 
     doc.add_paragraph("Instructions: Answer all questions cleanly in the spaces provided.\n")
 
-    # Sort selected questions by original CSV order to keep multipart questions intact
     selected_df = selected_df.sort_index()
-
     grouped = selected_df.groupby("Parent Question Text", sort=False)
 
     q_num = 1
@@ -177,7 +165,6 @@ def generate_docx(selected_df, include_answers=False):
             p_context = doc.add_paragraph(str(parent_text))
             p_context.runs[0].font.italic = True
 
-        # Check if group has an associated image and embed it right below the scenario
         for _, row in group.iterrows():
             img_path = resolve_image_path(row.get("Image File", "N/A"))
             if img_path:
@@ -185,7 +172,7 @@ def generate_docx(selected_df, include_answers=False):
                     p_img = doc.add_paragraph()
                     p_img.add_run().add_picture(img_path, width=Inches(4.5))
                     p_img.alignment = WD_ALIGN_PARAGRAPH.LEFT
-                    break  # Draw image once per scenario block
+                    break
                 except Exception:
                     pass
 
@@ -202,75 +189,6 @@ def generate_docx(selected_df, include_answers=False):
                 ans_p.add_run(f"Correct Answer: {row['Answer Details']}").bold = True
             else:
                 if q_type in ['Essay', 'Short Answer', 'Draw']:
-                    doc.add_paragraph("\n\n_________________________________________________________________________________\n" * 2)
+                    doc.add_paragraph("\n\n" + "_"*81 + "\n" + "_"*81 + "\n")
 
-            doc.add_paragraph()
-            q_num += 1
-
-    buffer = BytesIO()
-    doc.save(buffer)
-    buffer.seek(0)
-    return buffer
-
-# -----------------------------------------------------------------------------
-# SIDEBAR - AUTO-GENERATOR & EXPORT
-# -----------------------------------------------------------------------------
-st.sidebar.title("🧸 TEDDI Test Builder")
-
-basket_count = len(st.session_state.selected_indices)
-st.sidebar.metric(label="Selected Questions in Basket", value=basket_count)
-
-if basket_count > 0:
-    if st.sidebar.button("🗑️ Clear Basket", use_container_width=True):
-        st.session_state.selected_indices = set()
-        st.rerun()
-
-st.sidebar.markdown("---")
-st.sidebar.subheader("🎲 Auto-Generate Exam")
-
-blooms_levels = df[BLOOMS_COL].unique().tolist()
-blooms_targets = {}
-
-st.sidebar.caption("Set target question counts per Bloom's level:")
-for level in sorted(blooms_levels):
-    count_available = len(df[df[BLOOMS_COL] == level])
-    blooms_targets[level] = st.sidebar.number_input(
-        f"{level} (Max: {count_available})",
-        min_value=0,
-        max_value=count_available,
-        value=0,
-        key=f"target_{level}"
-    )
-
-if st.sidebar.button("⚡ Auto-Select Questions", type="primary", use_container_width=True):
-    new_selection = set()
-    for level, target in blooms_targets.items():
-        if target > 0:
-            level_indices = df[df[BLOOMS_COL] == level].index.tolist()
-            sampled = random.sample(level_indices, min(target, len(level_indices)))
-            
-            # Keep multipart questions together by selecting all sibling rows with the same Parent Question Text
-            for s_idx in sampled:
-                parent_val = df.loc[s_idx, "Parent Question Text"]
-                if parent_val != "N/A" and len(str(parent_val).strip()) > 0:
-                    sibling_indices = df[df["Parent Question Text"] == parent_val].index.tolist()
-                    new_selection.update(sibling_indices)
-                else:
-                    new_selection.add(s_idx)
-
-    st.session_state.selected_indices = new_selection
-    st.sidebar.success(f"Selected {len(new_selection)} questions!")
-    st.rerun()
-
-st.sidebar.markdown("---")
-st.sidebar.subheader("📥 Export Test Documents")
-
-if len(st.session_state.selected_indices) > 0:
-    selected_df = df.loc[sorted(list(st.session_state.selected_indices))]
-
-    student_docx = generate_docx(selected_df, include_answers=False)
-    st.sidebar.download_button(
-        label="📄 Download Student Exam (.docx)",
-        data=student_docx,
-        file_name="TEDDI_Student_Exam.docx",
-        mime="application/vnd.openxmlformats-officed
+            doc
