@@ -132,4 +132,119 @@ if BLOOMS_COL not in df.columns:
             BLOOMS_COL = c
             break
 
-DOCX_MIME = "application/vnd.openxmlformats-
+# Shortened string concatenation so it never breaks in terminal paste
+DOCX_MIME = "application/vnd.openxmlformats-officedocument." + "wordprocessingml.document"
+
+# -----------------------------------------------------------------------------
+# SESSION STATE SETUP
+# -----------------------------------------------------------------------------
+if "selected_indices" not in st.session_state:
+    st.session_state.selected_indices = set()
+
+# Helper function to resolve image paths across IMAGES folder
+def resolve_image_path(raw_img):
+    if raw_img == "N/A" or pd.isnull(raw_img):
+        return None
+    clean_val = str(raw_img).strip()
+    base_name = os.path.basename(clean_val)
+    
+    candidates = [
+        clean_val,
+        base_name,
+        os.path.join("IMAGES", base_name),
+        os.path.join("images", base_name),
+        os.path.join(os.getcwd(), "IMAGES", base_name)
+    ]
+    
+    for cand in candidates:
+        if cand and os.path.exists(cand) and os.path.isfile(cand):
+            return cand
+    return None
+
+# -----------------------------------------------------------------------------
+# DOCX GENERATION
+# -----------------------------------------------------------------------------
+def generate_docx(selected_df, include_answers=False):
+    doc = Document()
+
+    title_text = "FINAL EXAM - ANSWER KEY" if include_answers else "FINAL EXAM"
+    title = doc.add_heading(title_text, level=1)
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    if not include_answers:
+        doc.add_paragraph("Name: _______________________\t\tDate: _____________\n")
+
+    doc.add_paragraph("Instructions: Answer all questions cleanly in the spaces provided.\n")
+
+    selected_df = selected_df.sort_index()
+    parent_col = "Parent Question Text" if "Parent Question Text" in selected_df.columns else selected_df.columns[0]
+    grouped = selected_df.groupby(parent_col, sort=False)
+
+    q_num = 1
+    for parent_text, group in grouped:
+        for _, row in group.iterrows():
+            img_path = resolve_image_path(row.get("Image File", "N/A"))
+            if img_path:
+                try:
+                    p_img = doc.add_paragraph()
+                    p_img.add_run().add_picture(img_path, width=Inches(4.5))
+                    p_img.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                    break
+                except Exception:
+                    pass
+
+        if parent_text != "N/A" and len(str(parent_text).strip()) > 0:
+            p_context = doc.add_paragraph(str(parent_text))
+            p_context.runs[0].font.italic = True
+
+        for idx, row in group.iterrows():
+            q_type = row.get('Question Type', 'Question')
+            b_level = row.get(BLOOMS_COL, 'N/A')
+            q_part = row.get('Question Part Text', row.get('Question Text', ''))
+
+            q_p = doc.add_paragraph()
+            q_p.add_run(f"Q{q_num}. [{q_type} | {b_level}]\n").bold = True
+            q_p.add_run(f"{q_part}\n")
+
+            if include_answers:
+                ans_p = doc.add_paragraph()
+                ans_val = row.get('Answer Details', row.get('Correct Answer', 'N/A'))
+                ans_p.add_run(f"Correct Answer: {ans_val}").bold = True
+            else:
+                if q_type in ['Essay', 'Short Answer', 'Draw']:
+                    doc.add_paragraph("\n\n" + "_"*80 + "\n" + "_"*80 + "\n")
+
+            doc.add_paragraph()
+            q_num += 1
+
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+# -----------------------------------------------------------------------------
+# SIDEBAR
+# -----------------------------------------------------------------------------
+if logo_b64:
+    sidebar_img = f'<img src="{logo_b64}" width="28" style="vertical-align: middle; margin-right: 8px;">'
+    st.sidebar.markdown(f"### {sidebar_img} TEDDIE Test Builder", unsafe_allow_html=True)
+else:
+    st.sidebar.markdown("### üêª TEDDIE Test Builder")
+
+basket_count = len(st.session_state.selected_indices)
+st.sidebar.metric(label="Questions in Basket", value=basket_count)
+
+if basket_count > 0:
+    if st.sidebar.button("üóëÔ∏è Clear Basket", use_container_width=True):
+        st.session_state.selected_indices = set()
+        st.rerun()
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("Ìæ≤ Auto-Generate Exam")
+
+blooms_levels = df[BLOOMS_COL].unique().tolist()
+blooms_targets = {}
+
+st.sidebar.caption("Set target question counts per Bloom's level:")
+for level in sorted(blooms_levels):
+    count_available = len(df
