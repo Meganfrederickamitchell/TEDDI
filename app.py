@@ -12,7 +12,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 # PAGE CONFIG
 # -----------------------------------------------------------------------------
 st.set_page_config(
-    page_title="TEDDI | Tagged Exam Database",
+    page_title="TEDDIE | Tagged Exam Database",
     page_icon="🐻",
     layout="wide"
 )
@@ -93,7 +93,7 @@ st.markdown(f"""
         </div>
         <div class="teddi-header-text">
             <h1>TEDDIE</h1>
-            <p><b>Tagged Exam Database for Departmental Instruction</b> — Fast, Bloom's Taxonomy aligned test builder.</p>
+            <p><b>Tagged Exam Database for Departmental Instruction and Evaluation</b> — Fast, Bloom's Taxonomy aligned test builder.</p>
         </div>
     </div>
 """, unsafe_allow_html=True)
