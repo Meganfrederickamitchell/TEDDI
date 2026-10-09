@@ -93,7 +93,7 @@ st.markdown(f"""
         </div>
         <div class="teddi-header-text">
             <h1>TEDDIE</h1>
-            <p><b>Tagged Exam Database for Departmental Instruction and Evaluation</b> — Fast, Bloom's Taxonomy aligned test builder.</p>
+            <p><b>Tagged Exam Database for Departmental Instruction and Evaluation</b> — Bloom's Taxonomy aligned test builder with embedded figure support.</p>
         </div>
     </div>
 """, unsafe_allow_html=True)
@@ -137,7 +137,7 @@ DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.docu
 if "selected_indices" not in st.session_state:
     st.session_state.selected_indices = set()
 
-# Helper function to resolve image paths
+# Helper function to resolve image paths across IMAGES folder
 def resolve_image_path(raw_img):
     if raw_img == "N/A" or pd.isnull(raw_img):
         return None
@@ -178,11 +178,7 @@ def generate_docx(selected_df, include_answers=False):
 
     q_num = 1
     for parent_text, group in grouped:
-        if parent_text != "N/A" and len(str(parent_text).strip()) > 0:
-            doc.add_heading("Context / Scenario:", level=3)
-            p_context = doc.add_paragraph(str(parent_text))
-            p_context.runs[0].font.italic = True
-
+        # Embed image directly under the scenario block
         for _, row in group.iterrows():
             img_path = resolve_image_path(row.get("Image File", "N/A"))
             if img_path:
@@ -193,6 +189,11 @@ def generate_docx(selected_df, include_answers=False):
                     break
                 except Exception:
                     pass
+
+        # Print Parent Scenario Text cleanly without the "Context / Scenario:" label
+        if parent_text != "N/A" and len(str(parent_text).strip()) > 0:
+            p_context = doc.add_paragraph(str(parent_text))
+            p_context.runs[0].font.italic = True
 
         for idx, row in group.iterrows():
             q_type = row.get('Question Type', 'Question')
@@ -222,143 +223,4 @@ def generate_docx(selected_df, include_answers=False):
 # -----------------------------------------------------------------------------
 # SIDEBAR
 # -----------------------------------------------------------------------------
-sidebar_logo = f'<img src="{logo_b64}" width="30" style="margin-right: 8px;">' if logo_b64 else ''
-st.sidebar.markdown(f"### {sidebar_logo} TEDDIE Test Builder", unsafe_allow_html=True)
-
-basket_count = len(st.session_state.selected_indices)
-st.sidebar.metric(label="Questions in Basket", value=basket_count)
-
-if basket_count > 0:
-    if st.sidebar.button("🗑️ Clear Basket", use_container_width=True):
-        st.session_state.selected_indices = set()
-        st.rerun()
-
-st.sidebar.markdown("---")
-st.sidebar.subheader("🎲 Auto-Generate Exam")
-
-blooms_levels = df[BLOOMS_COL].unique().tolist()
-blooms_targets = {}
-
-st.sidebar.caption("Set target question counts per Bloom's level:")
-for level in sorted(blooms_levels):
-    count_available = len(df[df[BLOOMS_COL] == level])
-    blooms_targets[level] = st.sidebar.number_input(
-        f"{level} (Max: {count_available})",
-        min_value=0,
-        max_value=count_available,
-        value=0,
-        key=f"target_{level}"
-    )
-
-if st.sidebar.button("⚡ Auto-Select Questions", type="primary", use_container_width=True):
-    new_selection = set()
-    for level, target in blooms_targets.items():
-        if target > 0:
-            level_indices = df[df[BLOOMS_COL] == level].index.tolist()
-            sampled = random.sample(level_indices, min(target, len(level_indices)))
-            
-            for s_idx in sampled:
-                parent_val = df.loc[s_idx, "Parent Question Text"] if "Parent Question Text" in df.columns else "N/A"
-                if parent_val != "N/A" and len(str(parent_val).strip()) > 0:
-                    sibling_indices = df[df["Parent Question Text"] == parent_val].index.tolist()
-                    new_selection.update(sibling_indices)
-                else:
-                    new_selection.add(s_idx)
-
-    st.session_state.selected_indices = new_selection
-    st.sidebar.success(f"Selected {len(new_selection)} questions!")
-    st.rerun()
-
-st.sidebar.markdown("---")
-st.sidebar.subheader("📥 Export Test Documents")
-
-if len(st.session_state.selected_indices) > 0:
-    selected_df = df.loc[sorted(list(st.session_state.selected_indices))]
-
-    student_docx = generate_docx(selected_df, include_answers=False)
-    st.sidebar.download_button(
-        label="📄 Download Student Exam (.docx)",
-        data=student_docx,
-        file_name="TEDDIE_Student_Exam.docx",
-        mime=DOCX_MIME,
-        use_container_width=True
-    )
-
-    key_docx = generate_docx(selected_df, include_answers=True)
-    st.sidebar.download_button(
-        label="🔑 Download Answer Key (.docx)",
-        data=key_docx,
-        file_name="TEDDIE_Teacher_Answer_Key.docx",
-        mime=DOCX_MIME,
-        use_container_width=True
-    )
-else:
-    st.sidebar.info("Add questions to the basket to export docx files.")
-
-# -----------------------------------------------------------------------------
-# MAIN CONTENT
-# -----------------------------------------------------------------------------
-st.subheader("🔍 Explore Question Bank")
-
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    selected_blooms = st.multiselect("Filter by Bloom's Level", options=sorted(blooms_levels))
-with col2:
-    q_types = sorted(df["Question Type"].unique().tolist()) if "Question Type" in df.columns else []
-    selected_types = st.multiselect("Filter by Question Type", options=q_types)
-with col3:
-    search_query = st.text_input("Search Keywords", value="", placeholder="e.g. Carbon, Heart...")
-
-filtered_df = df.copy()
-
-if selected_blooms:
-    filtered_df = filtered_df[filtered_df[BLOOMS_COL].isin(selected_blooms)]
-if selected_types and "Question Type" in df.columns:
-    filtered_df = filtered_df[filtered_df["Question Type"].isin(selected_types)]
-if search_query:
-    q_col = "Question Part Text" if "Question Part Text" in df.columns else "Question Text"
-    p_col = "Parent Question Text" if "Parent Question Text" in df.columns else q_col
-    filtered_df = filtered_df[
-        filtered_df[q_col].astype(str).str.contains(search_query, case=False) |
-        filtered_df[p_col].astype(str).str.contains(search_query, case=False)
-    ]
-
-st.markdown(f"**Showing {len(filtered_df)} of {len(df)} total questions**")
-
-for idx, row in filtered_df.iterrows():
-    is_in_basket = idx in st.session_state.selected_indices
-    b_lvl = row.get(BLOOMS_COL, 'N/A')
-    q_typ = row.get('Question Type', 'Question')
-    part_nm = row.get('Part Name', f"Q{idx+1}")
-
-    card_label = f"{'✅ IN BASKET | ' if is_in_basket else ''}[{q_typ}] [{b_lvl}] — {part_nm}"
-
-    with st.expander(card_label):
-        parent_txt = row.get('Parent Question Text', 'N/A')
-        if parent_txt != "N/A":
-            st.markdown(f"**📖 Context / Scenario:**\n> *{parent_txt}*")
-
-        q_txt = row.get('Question Part Text', row.get('Question Text', ''))
-        ans_txt = row.get('Answer Details', row.get('Correct Answer', 'N/A'))
-        
-        st.markdown(f"**❓ Question:** {q_txt}")
-        st.markdown(f"**💡 Key / Answer:** `{ans_txt}`")
-
-        img_path = resolve_image_path(row.get("Image File", "N/A"))
-        if img_path:
-            st.image(img_path, width=450)
-
-        st.markdown("---")
-        if is_in_basket:
-            if st.button("➖ Remove from Exam Basket", key=f"btn_rem_{idx}"):
-                st.session_state.selected_indices.remove(idx)
-                st.rerun()
-        else:
-            if st.button("➕ Add to Exam Basket", key=f"btn_add_{idx}"):
-                if parent_txt != "N/A" and len(str(parent_txt).strip()) > 0 and "Parent Question Text" in df.columns:
-                    sibling_indices = df[df["Parent Question Text"] == parent_txt].index.tolist()
-                    st.session_state.selected_indices.update(sibling_indices)
-                else:
-                    st.session_state.selected_indices.add(idx)
-                st.rerun()
+sidebar_logo = f'<img src="{logo_b64}" width="30" style="
