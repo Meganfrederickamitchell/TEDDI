@@ -84,7 +84,10 @@ st.markdown("""
 # -----------------------------------------------------------------------------
 # HEADER BANNER
 # -----------------------------------------------------------------------------
-logo_html = f'<img src="{logo_b64}" width="65" style="filter: brightness(0) invert(1);">' if logo_b64 else '🐻'
+if logo_b64:
+    logo_html = f'<img src="{logo_b64}" width="65" style="filter: brightness(0) invert(1);">'
+else:
+    logo_html = '🐻'
 
 st.markdown(f"""
     <div class="teddi-header">
@@ -93,7 +96,7 @@ st.markdown(f"""
         </div>
         <div class="teddi-header-text">
             <h1>TEDDIE</h1>
-            <p><b>Tagged Exam Database for Departmental Instruction and Evaluation</b> — Bloom's Taxonomy aligned test builder with embedded figure support.</p>
+            <p><b>Tagged Exam Database for Departmental Instruction and Evaluation</b> — Fast, intuitive, Bloom's Taxonomy aligned test builder with embedded figure support.</p>
         </div>
     </div>
 """, unsafe_allow_html=True)
@@ -129,98 +132,4 @@ if BLOOMS_COL not in df.columns:
             BLOOMS_COL = c
             break
 
-DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-
-# -----------------------------------------------------------------------------
-# SESSION STATE SETUP
-# -----------------------------------------------------------------------------
-if "selected_indices" not in st.session_state:
-    st.session_state.selected_indices = set()
-
-# Helper function to resolve image paths across IMAGES folder
-def resolve_image_path(raw_img):
-    if raw_img == "N/A" or pd.isnull(raw_img):
-        return None
-    clean_val = str(raw_img).strip()
-    base_name = os.path.basename(clean_val)
-    
-    candidates = [
-        clean_val,
-        base_name,
-        os.path.join("IMAGES", base_name),
-        os.path.join("images", base_name),
-        os.path.join(os.getcwd(), "IMAGES", base_name)
-    ]
-    
-    for cand in candidates:
-        if cand and os.path.exists(cand) and os.path.isfile(cand):
-            return cand
-    return None
-
-# -----------------------------------------------------------------------------
-# DOCX GENERATION
-# -----------------------------------------------------------------------------
-def generate_docx(selected_df, include_answers=False):
-    doc = Document()
-
-    title_text = "FINAL EXAM - ANSWER KEY" if include_answers else "FINAL EXAM"
-    title = doc.add_heading(title_text, level=1)
-    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-    if not include_answers:
-        doc.add_paragraph("Name: _______________________\t\tDate: _____________\n")
-
-    doc.add_paragraph("Instructions: Answer all questions cleanly in the spaces provided.\n")
-
-    selected_df = selected_df.sort_index()
-    parent_col = "Parent Question Text" if "Parent Question Text" in selected_df.columns else selected_df.columns[0]
-    grouped = selected_df.groupby(parent_col, sort=False)
-
-    q_num = 1
-    for parent_text, group in grouped:
-        # Embed image directly under the scenario block
-        for _, row in group.iterrows():
-            img_path = resolve_image_path(row.get("Image File", "N/A"))
-            if img_path:
-                try:
-                    p_img = doc.add_paragraph()
-                    p_img.add_run().add_picture(img_path, width=Inches(4.5))
-                    p_img.alignment = WD_ALIGN_PARAGRAPH.LEFT
-                    break
-                except Exception:
-                    pass
-
-        # Print Parent Scenario Text cleanly without the "Context / Scenario:" label
-        if parent_text != "N/A" and len(str(parent_text).strip()) > 0:
-            p_context = doc.add_paragraph(str(parent_text))
-            p_context.runs[0].font.italic = True
-
-        for idx, row in group.iterrows():
-            q_type = row.get('Question Type', 'Question')
-            b_level = row.get(BLOOMS_COL, 'N/A')
-            q_part = row.get('Question Part Text', row.get('Question Text', ''))
-
-            q_p = doc.add_paragraph()
-            q_p.add_run(f"Q{q_num}. [{q_type} | {b_level}]\n").bold = True
-            q_p.add_run(f"{q_part}\n")
-
-            if include_answers:
-                ans_p = doc.add_paragraph()
-                ans_val = row.get('Answer Details', row.get('Correct Answer', 'N/A'))
-                ans_p.add_run(f"Correct Answer: {ans_val}").bold = True
-            else:
-                if q_type in ['Essay', 'Short Answer', 'Draw']:
-                    doc.add_paragraph("\n\n" + "_"*80 + "\n" + "_"*80 + "\n")
-
-            doc.add_paragraph()
-            q_num += 1
-
-    buffer = BytesIO()
-    doc.save(buffer)
-    buffer.seek(0)
-    return buffer
-
-# -----------------------------------------------------------------------------
-# SIDEBAR
-# -----------------------------------------------------------------------------
-sidebar_logo = f'<img src="{logo_b64}" width="30" style="
+DOCX_MIME = "application/vnd.openxmlformats-
