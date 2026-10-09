@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import random
 import os
+import base64
 from io import BytesIO
 from docx import Document
 from docx.shared import Inches, Pt
@@ -16,6 +17,23 @@ st.set_page_config(
     layout="wide"
 )
 
+# Helper function to convert local image to Base64 HTML string
+def get_image_base64(img_path):
+    if os.path.exists(img_path):
+        with open(img_path, "rb") as f:
+            data = f.read()
+        return f"data:image/png;base64,{base64.b64encode(data).decode()}"
+    return None
+
+# Resolve bear silhouette image path
+logo_path = None
+for candidate in ["IMAGES/bear_silhouette.png", "images/bear_silhouette.png", "bear_silhouette.png"]:
+    if os.path.exists(candidate):
+        logo_path = candidate
+        break
+
+logo_b64 = get_image_base64(logo_path) if logo_path else None
+
 # Custom CSS
 st.markdown("""
     <style>
@@ -28,7 +46,7 @@ st.markdown("""
         margin-bottom: 2rem;
         display: flex;
         align-items: center;
-        gap: 1.2rem;
+        gap: 1.5rem;
     }
     .teddi-header-text h1 {
         color: white !important;
@@ -66,9 +84,13 @@ st.markdown("""
 # -----------------------------------------------------------------------------
 # HEADER BANNER
 # -----------------------------------------------------------------------------
-st.markdown("""
+logo_html = f'<img src="{logo_b64}" width="65" style="filter: brightness(0) invert(1);">' if logo_b64 else '🐻'
+
+st.markdown(f"""
     <div class="teddi-header">
-        <div style="font-size: 3.2rem;">🐻</div>
+        <div style="padding: 0;">
+            {logo_html}
+        </div>
         <div class="teddi-header-text">
             <h1>TEDDIE</h1>
             <p><b>Tagged Exam Database for Departmental Instruction</b> — Fast, Bloom's Taxonomy aligned test builder.</p>
@@ -115,7 +137,7 @@ DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.docu
 if "selected_indices" not in st.session_state:
     st.session_state.selected_indices = set()
 
-# Helper function to resolve image paths across both 'images' and 'IMAGES' folders
+# Helper function to resolve image paths
 def resolve_image_path(raw_img):
     if raw_img == "N/A" or pd.isnull(raw_img):
         return None
@@ -125,9 +147,8 @@ def resolve_image_path(raw_img):
     candidates = [
         clean_val,
         base_name,
-        os.path.join("images", base_name),
         os.path.join("IMAGES", base_name),
-        os.path.join(os.getcwd(), "images", base_name),
+        os.path.join("images", base_name),
         os.path.join(os.getcwd(), "IMAGES", base_name)
     ]
     
@@ -201,7 +222,8 @@ def generate_docx(selected_df, include_answers=False):
 # -----------------------------------------------------------------------------
 # SIDEBAR
 # -----------------------------------------------------------------------------
-st.sidebar.title("🧸 TEDDI Test Builder")
+sidebar_logo = f'<img src="{logo_b64}" width="30" style="margin-right: 8px;">' if logo_b64 else ''
+st.sidebar.markdown(f"### {sidebar_logo} TEDDI Test Builder", unsafe_allow_html=True)
 
 basket_count = len(st.session_state.selected_indices)
 st.sidebar.metric(label="Questions in Basket", value=basket_count)
@@ -308,4 +330,35 @@ for idx, row in filtered_df.iterrows():
     is_in_basket = idx in st.session_state.selected_indices
     b_lvl = row.get(BLOOMS_COL, 'N/A')
     q_typ = row.get('Question Type', 'Question')
-    part_nm = row.get
+    part_nm = row.get('Part Name', f"Q{idx+1}")
+
+    card_label = f"{'✅ IN BASKET | ' if is_in_basket else ''}[{q_typ}] [{b_lvl}] — {part_nm}"
+
+    with st.expander(card_label):
+        parent_txt = row.get('Parent Question Text', 'N/A')
+        if parent_txt != "N/A":
+            st.markdown(f"**📖 Context / Scenario:**\n> *{parent_txt}*")
+
+        q_txt = row.get('Question Part Text', row.get('Question Text', ''))
+        ans_txt = row.get('Answer Details', row.get('Correct Answer', 'N/A'))
+        
+        st.markdown(f"**❓ Question:** {q_txt}")
+        st.markdown(f"**💡 Key / Answer:** `{ans_txt}`")
+
+        img_path = resolve_image_path(row.get("Image File", "N/A"))
+        if img_path:
+            st.image(img_path, width=450)
+
+        st.markdown("---")
+        if is_in_basket:
+            if st.button("➖ Remove from Exam Basket", key=f"btn_rem_{idx}"):
+                st.session_state.selected_indices.remove(idx)
+                st.rerun()
+        else:
+            if st.button("➕ Add to Exam Basket", key=f"btn_add_{idx}"):
+                if parent_txt != "N/A" and len(str(parent_txt).strip()) > 0 and "Parent Question Text" in df.columns:
+                    sibling_indices = df[df["Parent Question Text"] == parent_txt].index.tolist()
+                    st.session_state.selected_indices.update(sibling_indices)
+                else:
+                    st.session_state.selected_indices.add(idx)
+                st.rerun()
