@@ -139,13 +139,24 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# LOAD DATA
+# LOAD DATA (With Multiple Path Checks)
 # -----------------------------------------------------------------------------
 @st.cache_data
 def load_data():
-    csv_file = "exam_questions_extracted.csv"
-    if not os.path.exists(csv_file):
-        st.error("CSV file not found!")
+    csv_candidates = [
+        "exam_questions_extracted.csv",
+        os.path.join(os.getcwd(), "exam_questions_extracted.csv"),
+        os.path.join(os.path.dirname(__file__), "exam_questions_extracted.csv") if '__file__' in globals() else ""
+    ]
+    
+    csv_file = None
+    for cand in csv_candidates:
+        if cand and os.path.exists(cand):
+            csv_file = cand
+            break
+
+    if not csv_file:
+        st.error("⚠️ `exam_questions_extracted.csv` not found in root directory!")
         return pd.DataFrame()
 
     try:
@@ -202,45 +213,4 @@ def resolve_image_path(raw_img):
     for cand in candidates:
         if cand and os.path.exists(cand) and os.path.isfile(cand):
             return cand
-    return None
-
-# -----------------------------------------------------------------------------
-# DOCX GENERATION
-# -----------------------------------------------------------------------------
-def generate_docx(selected_df, include_answers=False):
-    doc = Document()
-
-    title_text = "FINAL EXAM - ANSWER KEY" if include_answers else "FINAL EXAM"
-    title = doc.add_heading(title_text, level=1)
-    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-    if not include_answers:
-        doc.add_paragraph("Name: _______________________\t\tDate: _____________\n")
-
-    doc.add_paragraph("Instructions: Answer all questions cleanly in the spaces provided.\n")
-
-    selected_df = selected_df.sort_index()
-    parent_col = "Parent Question Text" if "Parent Question Text" in selected_df.columns else selected_df.columns[0]
-    grouped = selected_df.groupby(parent_col, sort=False)
-
-    q_num = 1
-    for parent_text, group in grouped:
-        for _, row in group.iterrows():
-            img_path = resolve_image_path(row.get("Image File", "N/A"))
-            if img_path:
-                try:
-                    p_img = doc.add_paragraph()
-                    p_img.add_run().add_picture(img_path, width=Inches(4.5))
-                    p_img.alignment = WD_ALIGN_PARAGRAPH.LEFT
-                    break
-                except Exception:
-                    pass
-
-        if parent_text != "N/A" and len(str(parent_text).strip()) > 0:
-            p_context = doc.add_paragraph(str(parent_text))
-            p_context.runs[0].font.italic = True
-
-        for idx, row in group.iterrows():
-            q_type = row.get('Question Type', 'Question')
-            b_level = row.get(BLOOMS_COL, 'N/A')
-            q_
+    return
