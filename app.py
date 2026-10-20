@@ -130,7 +130,7 @@ st.markdown(f"""
         <div style="padding: 0;">
             {logo_html}
         </div>
-        <div class="teddi-header-text">
+        <div class="teddi-header-text"><span style="display: inline-block; background-color: #FFFFFF; color: #881337; font-weight: 800; font-size: 0.85rem; padding: 0.3rem 0.85rem; border-radius: 20px; margin-bottom: 0.4rem;">🧬 UMass Amherst Biology</span>
             <span class="umass-badge">🧬 UMass Amherst Biology</span>
             <h1>TEDDIE</h1>
             <p><b>Tagged Exam Database for Departmental Instruction and Evaluation</b> - Fast, intuitive, Bloom's Taxonomy aligned test builder with embedded figure support.</p>
