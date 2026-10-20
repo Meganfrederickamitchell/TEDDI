@@ -110,7 +110,7 @@ st.markdown("""
 # HEADER BANNER
 # -----------------------------------------------------------------------------
 if logo_b64:
-    logo_html = f'<img src="{logo_b64}" width="65" style="filter: brightness(0) invert(1);">'
+    logo_html = f'<img src="{logo_b64}" width="65" style="border-radius: 8px;">'
 else:
     logo_html = '\U0001F43B'
 
@@ -262,6 +262,7 @@ if logo_b64:
     st.sidebar.markdown(f"### {sidebar_img} TEDDIE Test Builder", unsafe_allow_html=True)
 else:
     st.sidebar.markdown("### \U0001F43B TEDDIE Test Builder")
+st.sidebar.caption("🐻 Mascot generated via Google Gemini")
 
 basket_count = len(st.session_state.selected_indices)
 st.sidebar.metric(label="Questions in Basket", value=basket_count)
