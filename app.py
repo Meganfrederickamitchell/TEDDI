@@ -262,7 +262,7 @@ if logo_b64:
     st.sidebar.markdown(f"### {sidebar_img} TEDDIE Test Builder", unsafe_allow_html=True)
 else:
     st.sidebar.markdown("### \U0001F43B TEDDIE Test Builder")
-st.sidebar.caption("🐻 Mascot generated via Google Gemini")
+st.sidebar.caption("Mascot generated via Google Gemini")
 
 basket_count = len(st.session_state.selected_indices)
 st.sidebar.metric(label="Questions in Basket", value=basket_count)
