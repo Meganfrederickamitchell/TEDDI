@@ -34,49 +34,85 @@ for candidate in ["IMAGES/bear_silhouette.png", "images/bear_silhouette.png", "b
 
 logo_b64 = get_image_base64(logo_path) if logo_path else None
 
-# Custom CSS
+# Custom CSS: UMass Amherst Maroon (#881337) and Neutral White Palette
 st.markdown("""
     <style>
-    .stApp { background-color: #F0F9FF; }
+    /* Neutral White App Canvas */
+    .stApp { 
+        background-color: #FFFFFF !important; 
+    }
+    
+    /* Header Banner - UMass Maroon Block */
     .teddi-header {
-        background: linear-gradient(135deg, #BA55D3 0%, #00CED1 100%);
-        padding: 1.8rem 2rem;
-        border-radius: 16px;
-        color: white;
+        background-color: #881337 !important;
+        padding: 1.8rem 2.2rem;
+        border-radius: 18px;
+        color: #FFFFFF !important;
         margin-bottom: 2rem;
         display: flex;
         align-items: center;
         gap: 1.5rem;
+        box-shadow: 0 4px 16px rgba(136, 19, 55, 0.2);
     }
     .teddi-header-text h1 {
-        color: white !important;
-        font-family: 'Inter', sans-serif;
+        color: #FFFFFF !important;
+        font-family: 'Inter', system-ui, sans-serif;
         font-weight: 800;
         margin: 0;
         font-size: 2.3rem;
     }
     .teddi-header-text p {
-        color: #F0FDFA !important;
+        color: #FFE4E6 !important;
         font-size: 1.05rem;
         margin-top: 0.2rem;
         margin-bottom: 0;
     }
-    section[data-testid="stSidebar"] {
-        background-color: #E0F2FE;
-        border-right: 1px solid #BAE6FD;
+    
+    /* Bubbly Badge for UMass Amherst Biology */
+    .umass-badge {
+        display: inline-block;
+        background-color: #FFFFFF;
+        color: #881337;
+        font-weight: 800;
+        font-size: 0.85rem;
+        padding: 0.3rem 0.85rem;
+        border-radius: 20px;
+        margin-bottom: 0.4rem;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+        letter-spacing: 0.4px;
     }
+
+    /* Sidebar - Soft Frame with Maroon Accent */
+    section[data-testid="stSidebar"] {
+        background-color: #FFF1F2 !important;
+        border-right: 3px solid #881337 !important;
+    }
+
+    /* Question Cards - Clean White Card with Left Maroon Accent Border */
     div[data-testid="stExpander"] {
-        background-color: white !important;
-        border: 1px solid #BAE6FD !important;
+        background-color: #FFFFFF !important;
+        border: 1px solid #FFE4E6 !important;
+        border-left: 6px solid #881337 !important;
         border-radius: 12px !important;
         margin-bottom: 0.8rem;
+        box-shadow: 0 2px 6px rgba(136, 19, 55, 0.05) !important;
     }
+    div[data-testid="stExpander"]:hover {
+        border-color: #881337 !important;
+        border-left: 6px solid #9F1239 !important;
+    }
+
+    /* Buttons - Solid Maroon Block */
     button[kind="primary"], .stButton>button {
-        background-color: #FF8C00 !important;
-        color: white !important;
+        background-color: #881337 !important;
+        color: #FFFFFF !important;
         border: none !important;
         border-radius: 10px !important;
         font-weight: 700 !important;
+        transition: background-color 0.2s ease !important;
+    }
+    button[kind="primary"]:hover, .stButton>button:hover {
+        background-color: #701A2E !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -95,6 +131,7 @@ st.markdown(f"""
             {logo_html}
         </div>
         <div class="teddi-header-text">
+            <span class="umass-badge">🧬 UMass Amherst Biology</span>
             <h1>TEDDIE</h1>
             <p><b>Tagged Exam Database for Departmental Instruction and Evaluation</b> - Fast, intuitive, Bloom's Taxonomy aligned test builder with embedded figure support.</p>
         </div>
@@ -153,7 +190,7 @@ def resolve_image_path(raw_img):
         return None
     clean_val = str(raw_img).strip()
     base_name = os.path.basename(clean_val)
-    
+
     candidates = [
         clean_val,
         base_name,
@@ -161,7 +198,7 @@ def resolve_image_path(raw_img):
         os.path.join("images", base_name),
         os.path.join(os.getcwd(), "IMAGES", base_name)
     ]
-    
+
     for cand in candidates:
         if cand and os.path.exists(cand) and os.path.isfile(cand):
             return cand
@@ -206,171 +243,4 @@ def generate_docx(selected_df, include_answers=False):
         for idx, row in group.iterrows():
             q_type = row.get('Question Type', 'Question')
             b_level = row.get(BLOOMS_COL, 'N/A')
-            q_part = row.get('Question Part Text', row.get('Question Text', ''))
-
-            q_p = doc.add_paragraph()
-            q_p.add_run(f"Q{q_num}. [{q_type} | {b_level}]\n").bold = True
-            q_p.add_run(f"{q_part}\n")
-
-            if include_answers:
-                ans_p = doc.add_paragraph()
-                ans_val = row.get('Answer Details', row.get('Correct Answer', 'N/A'))
-                ans_p.add_run(f"Correct Answer: {ans_val}").bold = True
-            else:
-                if q_type in ['Essay', 'Short Answer', 'Draw']:
-                    doc.add_paragraph("\n\n" + "_"*80 + "\n" + "_"*80 + "\n")
-
-            doc.add_paragraph()
-            q_num += 1
-
-    buffer = BytesIO()
-    doc.save(buffer)
-    buffer.seek(0)
-    return buffer
-
-# -----------------------------------------------------------------------------
-# SIDEBAR
-# -----------------------------------------------------------------------------
-if logo_b64:
-    sidebar_img = f'<img src="{logo_b64}" width="28" style="vertical-align: middle; margin-right: 8px;">'
-    st.sidebar.markdown(f"### {sidebar_img} TEDDIE Test Builder", unsafe_allow_html=True)
-else:
-    st.sidebar.markdown("### \U0001F43B TEDDIE Test Builder")
-
-basket_count = len(st.session_state.selected_indices)
-st.sidebar.metric(label="Questions in Basket", value=basket_count)
-
-if basket_count > 0:
-    if st.sidebar.button("Clear Basket", use_container_width=True):
-        st.session_state.selected_indices = set()
-        st.rerun()
-
-st.sidebar.markdown("---")
-st.sidebar.subheader("Auto-Generate Exam")
-
-blooms_levels = df[BLOOMS_COL].unique().tolist()
-blooms_targets = {}
-
-st.sidebar.caption("Set target question counts per Bloom's level:")
-for level in sorted(blooms_levels):
-    count_available = len(df[df[BLOOMS_COL] == level])
-    blooms_targets[level] = st.sidebar.number_input(
-        f"{level} (Max: {count_available})",
-        min_value=0,
-        max_value=count_available,
-        value=0,
-        key=f"target_{level}"
-    )
-
-if st.sidebar.button("Auto-Select Questions", type="primary", use_container_width=True):
-    new_selection = set()
-    for level, target in blooms_targets.items():
-        if target > 0:
-            level_indices = df[df[BLOOMS_COL] == level].index.tolist()
-            sampled = random.sample(level_indices, min(target, len(level_indices)))
-            
-            for s_idx in sampled:
-                parent_val = df.loc[s_idx, "Parent Question Text"] if "Parent Question Text" in df.columns else "N/A"
-                if parent_val != "N/A" and len(str(parent_val).strip()) > 0:
-                    sibling_indices = df[df["Parent Question Text"] == parent_val].index.tolist()
-                    new_selection.update(sibling_indices)
-                else:
-                    new_selection.add(s_idx)
-
-    st.session_state.selected_indices = new_selection
-    st.sidebar.success(f"Selected {len(new_selection)} questions!")
-    st.rerun()
-
-st.sidebar.markdown("---")
-st.sidebar.subheader("Export Test Documents")
-
-if len(st.session_state.selected_indices) > 0:
-    selected_df = df.loc[sorted(list(st.session_state.selected_indices))]
-
-    student_docx = generate_docx(selected_df, include_answers=False)
-    st.sidebar.download_button(
-        label="Download Student Exam (.docx)",
-        data=student_docx,
-        file_name="TEDDI_Student_Exam.docx",
-        mime=DOCX_MIME,
-        use_container_width=True
-    )
-
-    key_docx = generate_docx(selected_df, include_answers=True)
-    st.sidebar.download_button(
-        label="Download Answer Key (.docx)",
-        data=key_docx,
-        file_name="TEDDI_Teacher_Answer_Key.docx",
-        mime=DOCX_MIME,
-        use_container_width=True
-    )
-else:
-    st.sidebar.info("Add questions to the basket to export docx files.")
-
-# -----------------------------------------------------------------------------
-# MAIN CONTENT
-# -----------------------------------------------------------------------------
-st.subheader("Explore Question Bank")
-
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    selected_blooms = st.multiselect("Filter by Bloom's Level", options=sorted(blooms_levels))
-with col2:
-    q_types = sorted(df["Question Type"].unique().tolist()) if "Question Type" in df.columns else []
-    selected_types = st.multiselect("Filter by Question Type", options=q_types)
-with col3:
-    search_query = st.text_input("Search Keywords", value="", placeholder="e.g. Carbon, Heart...")
-
-filtered_df = df.copy()
-
-if selected_blooms:
-    filtered_df = filtered_df[filtered_df[BLOOMS_COL].isin(selected_blooms)]
-if selected_types and "Question Type" in df.columns:
-    filtered_df = filtered_df[filtered_df["Question Type"].isin(selected_types)]
-if search_query:
-    q_col = "Question Part Text" if "Question Part Text" in df.columns else "Question Text"
-    p_col = "Parent Question Text" if "Parent Question Text" in df.columns else q_col
-    filtered_df = filtered_df[
-        filtered_df[q_col].astype(str).str.contains(search_query, case=False) |
-        filtered_df[p_col].astype(str).str.contains(search_query, case=False)
-    ]
-
-st.markdown(f"**Showing {len(filtered_df)} of {len(df)} total questions**")
-
-for idx, row in filtered_df.iterrows():
-    is_in_basket = idx in st.session_state.selected_indices
-    b_lvl = row.get(BLOOMS_COL, 'N/A')
-    q_typ = row.get('Question Type', 'Question')
-    part_nm = row.get('Part Name', f"Q{idx+1}")
-
-    card_label = f"{'[IN BASKET] ' if is_in_basket else ''}[{q_typ}] [{b_lvl}] - {part_nm}"
-
-    with st.expander(card_label):
-        parent_txt = row.get('Parent Question Text', 'N/A')
-        if parent_txt != "N/A":
-            st.markdown(f"**Scenario:**\n> *{parent_txt}*")
-
-        q_txt = row.get('Question Part Text', row.get('Question Text', ''))
-        ans_txt = row.get('Answer Details', row.get('Correct Answer', 'N/A'))
-        
-        st.markdown(f"**Question:** {q_txt}")
-        st.markdown(f"**Key / Answer:** `{ans_txt}`")
-
-        img_path = resolve_image_path(row.get("Image File", "N/A"))
-        if img_path:
-            st.image(img_path, width=450)
-
-        st.markdown("---")
-        if is_in_basket:
-            if st.button("Remove from Exam Basket", key=f"btn_rem_{idx}"):
-                st.session_state.selected_indices.remove(idx)
-                st.rerun()
-        else:
-            if st.button("Add to Exam Basket", key=f"btn_add_{idx}"):
-                if parent_txt != "N/A" and len(str(parent_txt).strip()) > 0 and "Parent Question Text" in df.columns:
-                    sibling_indices = df[df["Parent Question Text"] == parent_txt].index.tolist()
-                    st.session_state.selected_indices.update(sibling_indices)
-                else:
-                    st.session_state.selected_indices.add(idx)
-                st.rerun()
+            q_
