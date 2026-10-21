@@ -110,7 +110,7 @@ st.markdown("""
 # HEADER BANNER
 # -----------------------------------------------------------------------------
 if logo_b64:
-    logo_html = f'<img src="{logo_b64}" style="width: 155px; height: auto; border-radius: 12px;">'
+    logo_html = f'<img src="{logo_b64}" style="width: auto; height: 160px; max-height: 160px; object-fit: contain; margin: -10px 0; border-radius: 14px;" alt="TEDDIE bear">'
 else:
     logo_html = '\U0001F43B'
 
