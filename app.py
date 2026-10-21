@@ -110,7 +110,7 @@ st.markdown("""
 # HEADER BANNER
 # -----------------------------------------------------------------------------
 if logo_b64:
-    logo_html = f'<img src="{logo_b64}" style="width: auto; height: 160px; max-height: 160px; object-fit: contain; margin: -10px 0; border-radius: 14px;" alt="TEDDIE bear">'
+    logo_html = f'<img src="{logo_b64}" style="width: auto; height: 210px; max-height: 210px; object-fit: contain; margin: -10px 0; border-radius: 28px;" alt="TEDDIE bear">'
 else:
     logo_html = '\U0001F43B'
 
@@ -258,7 +258,7 @@ def generate_docx(selected_df, include_answers=False):
 # SIDEBAR
 # -----------------------------------------------------------------------------
 if logo_b64:
-    sidebar_img = f'<img src="{logo_b64}" width="28" style="vertical-align: middle; margin-right: 8px;">'
+    sidebar_img = f'<img src="{logo_b64}" width="48" style="vertical-align: middle; margin-right: 8px;">'
     st.sidebar.markdown(f"### {sidebar_img} TEDDIE Test Builder", unsafe_allow_html=True)
 else:
     st.sidebar.markdown("### \U0001F43B TEDDIE Test Builder")
