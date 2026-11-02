@@ -172,7 +172,7 @@ DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.docu
 if "selected_indices" not in st.session_state:
     st.session_state.selected_indices = set()
 
-# Helper function to resolve image paths across IMAGES folder
+# Robust image resolution logic across root and IMAGES directory
 def resolve_image_path(raw_img):
     if raw_img == "N/A" or pd.isnull(raw_img) or str(raw_img).strip() == "":
         return None
@@ -184,7 +184,8 @@ def resolve_image_path(raw_img):
         base_name,
         os.path.join("IMAGES", base_name),
         os.path.join("images", base_name),
-        os.path.join(os.getcwd(), "IMAGES", base_name)
+        os.path.join(os.getcwd(), "IMAGES", base_name),
+        os.path.join(os.getcwd(), base_name)
     ]
 
     for cand in candidates:
@@ -193,60 +194,72 @@ def resolve_image_path(raw_img):
     return None
 
 # -----------------------------------------------------------------------------
-# DOCX GENERATION
+# DOCX GENERATION LOGIC (Modes: 'student', 'key_only', 'combined')
 # -----------------------------------------------------------------------------
-def generate_docx(selected_df, include_answers=False):
+def generate_docx(selected_df, mode="student"):
     doc = Document()
-
-    title_text = "FINAL EXAM - ANSWER KEY" if include_answers else "FINAL EXAM"
-    title = doc.add_heading(title_text, level=1)
-    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-    if not include_answers:
-        doc.add_paragraph("Name: _______________________\t\tSPIRE ID: _____________\n")
-
-    doc.add_paragraph("Instructions: Answer all questions cleanly in the spaces provided.\n")
 
     selected_df = selected_df.sort_index()
     parent_col = "Parent Question Text" if "Parent Question Text" in selected_df.columns else selected_df.columns[0]
     grouped = selected_df.groupby(parent_col, sort=False)
 
-    q_num = 1
-    for parent_text, group in grouped:
-        for _, row in group.iterrows():
-            img_path = resolve_image_path(row.get("Image File", row.get("image_path", "N/A")))
-            if img_path:
-                try:
-                    p_img = doc.add_paragraph()
-                    p_img.add_run().add_picture(img_path, width=Inches(4.5))
-                    p_img.alignment = WD_ALIGN_PARAGRAPH.LEFT
-                    break
-                except Exception:
-                    pass
+    if mode in ["student", "combined"]:
+        title = doc.add_heading("BIOLOGY EXAM", level=1)
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        doc.add_paragraph("Name: _______________________\t\tSPIRE ID: _____________\n")
+        doc.add_paragraph("Instructions: Answer all questions cleanly in the spaces provided.\n")
 
-        if parent_text != "N/A" and len(str(parent_text).strip()) > 0:
-            p_context = doc.add_paragraph(str(parent_text))
-            p_context.runs[0].font.italic = True
+        q_num = 1
+        for parent_text, group in grouped:
+            for _, row in group.iterrows():
+                img_path = resolve_image_path(row.get("Image File", row.get("image_path", "N/A")))
+                if img_path:
+                    try:
+                        p_img = doc.add_paragraph()
+                        p_img.add_run().add_picture(img_path, width=Inches(4.5))
+                        p_img.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                        break
+                    except Exception:
+                        pass
 
-        for idx, row in group.iterrows():
-            q_type = row.get(TYPE_COL, 'Question')
-            b_level = row.get(BLOOMS_COL, 'N/A')
-            q_part = row.get('Question Part Text', row.get('Question Text', row.get('question_text', '')))
+            if parent_text != "N/A" and len(str(parent_text).strip()) > 0:
+                p_context = doc.add_paragraph(str(parent_text))
+                p_context.runs[0].font.italic = True
 
-            q_p = doc.add_paragraph()
-            q_p.add_run(f"Q{q_num}. [{q_type} | {b_level}]\n").bold = True
-            q_p.add_run(f"{q_part}\n")
+            for idx, row in group.iterrows():
+                q_type = row.get(TYPE_COL, 'Question')
+                b_level = row.get(BLOOMS_COL, 'N/A')
+                q_part = row.get('Question Part Text', row.get('Question Text', row.get('question_text', '')))
 
-            if include_answers:
-                ans_p = doc.add_paragraph()
-                ans_val = row.get('Answer Details', row.get('Correct Answer', row.get('correct_answer', 'N/A')))
-                ans_p.add_run(f"Correct Answer: {ans_val}").bold = True
-            else:
+                q_p = doc.add_paragraph()
+                q_p.add_run(f"Q{q_num}. [{q_type} | {b_level}]\n").bold = True
+                q_p.add_run(f"{q_part}\n")
+
                 if q_type in ['Essay', 'Short Answer', 'Draw', 'Open Response']:
                     doc.add_paragraph("\n\n" + "_"*80 + "\n" + "_"*80 + "\n")
 
-            doc.add_paragraph()
-            q_num += 1
+                doc.add_paragraph()
+                q_num += 1
+
+    if mode == "combined":
+        doc.add_page_break()
+
+    if mode in ["key_only", "combined"]:
+        title_key = doc.add_heading("EXAM ANSWER KEY", level=1)
+        title_key.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        doc.add_paragraph("Official Faculty Reference Key & Rubric\n")
+
+        q_num = 1
+        for parent_text, group in grouped:
+            for idx, row in group.iterrows():
+                ans_val = row.get('Answer Details', row.get('Correct Answer', row.get('correct_answer', 'N/A')))
+                b_level = row.get(BLOOMS_COL, 'N/A')
+                q_part = row.get('Question Part Text', row.get('Question Text', row.get('question_text', '')))
+
+                ans_p = doc.add_paragraph()
+                ans_p.add_run(f"Q{q_num} [{b_level}]: ").bold = True
+                ans_p.add_run(f"{ans_val}\n")
+                q_num += 1
 
     buffer = BytesIO()
     doc.save(buffer)
@@ -274,14 +287,12 @@ if basket_count > 0:
 st.sidebar.markdown("---")
 st.sidebar.subheader("Auto-Generate Exam")
 
-# Multiselect for Exam/Course and Topic requested by faculty
 exam_options = sorted([e for e in df[EXAM_COL].unique().tolist() if e != "N/A"]) if EXAM_COL in df.columns else []
 selected_exams = st.sidebar.multiselect("Filter by Exam / Course", options=exam_options, default=exam_options)
 
 topic_options = sorted([t for t in df[TOPIC_COL].unique().tolist() if t != "N/A"]) if TOPIC_COL in df.columns else []
 selected_topics = st.sidebar.multiselect("Filter by Topic (e.g., Hardy-Weinberg)", options=topic_options)
 
-# Filter pool for auto-generation
 auto_pool_df = df.copy()
 if selected_exams and EXAM_COL in auto_pool_df.columns:
     auto_pool_df = auto_pool_df[auto_pool_df[EXAM_COL].isin(selected_exams)]
@@ -327,20 +338,32 @@ st.sidebar.subheader("Export Test Documents")
 if len(st.session_state.selected_indices) > 0:
     selected_df = df.loc[sorted(list(st.session_state.selected_indices))]
 
-    student_docx = generate_docx(selected_df, include_answers=False)
+    # 1. Student Exam Only
+    student_docx = generate_docx(selected_df, mode="student")
     st.sidebar.download_button(
-        label="Download Student Exam (.docx)",
+        label="📄 1) Download Student Exam (.docx)",
         data=student_docx,
         file_name="TEDDI_Student_Exam.docx",
         mime=DOCX_MIME,
         use_container_width=True
     )
 
-    key_docx = generate_docx(selected_df, include_answers=True)
+    # 2. Answer Key Only
+    key_docx = generate_docx(selected_df, mode="key_only")
     st.sidebar.download_button(
-        label="Download Answer Key (.docx)",
+        label="🔑 2) Download Answer Key (.docx)",
         data=key_docx,
         file_name="TEDDI_Teacher_Answer_Key.docx",
+        mime=DOCX_MIME,
+        use_container_width=True
+    )
+
+    # 3. Combined Exam + Answer Key
+    combined_docx = generate_docx(selected_df, mode="combined")
+    st.sidebar.download_button(
+        label="📑 3) Download Exam + Answer Key (.docx)",
+        data=combined_docx,
+        file_name="TEDDI_Exam_With_Answer_Key.docx",
         mime=DOCX_MIME,
         use_container_width=True
     )
