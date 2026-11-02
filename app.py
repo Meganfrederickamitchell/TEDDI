@@ -17,7 +17,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# Helper function to convert local image to Base64 HTML string
 def get_image_base64(img_path):
     if img_path and os.path.exists(img_path):
         with open(img_path, "rb") as f:
@@ -25,7 +24,6 @@ def get_image_base64(img_path):
             return f"data:image/png;base64,{base64.b64encode(data).decode()}"
     return None
 
-# Resolve bear silhouette image path
 logo_path = None
 for candidate in ["IMAGES/bear_silhouette.png", "images/bear_silhouette.png", "bear_silhouette.png"]:
     if os.path.exists(candidate):
@@ -34,7 +32,6 @@ for candidate in ["IMAGES/bear_silhouette.png", "images/bear_silhouette.png", "b
 
 logo_b64 = get_image_base64(logo_path)
 
-# Custom CSS: UMass Amherst Maroon (#881337) & Neutral White Palette
 st.markdown("""
     <style>
     .stApp {
@@ -106,9 +103,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# -----------------------------------------------------------------------------
-# HEADER BANNER
-# -----------------------------------------------------------------------------
 if logo_b64:
     logo_html = f'<img src="{logo_b64}" style="width: auto; height: 210px; max-height: 210px; object-fit: contain; margin: -10px 0; border-radius: 28px;" alt="TEDDIE bear">'
 else:
@@ -127,9 +121,6 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-# -----------------------------------------------------------------------------
-# LOAD DATA
-# -----------------------------------------------------------------------------
 @st.cache_data
 def load_data():
     csv_file = "exam_questions_extracted.csv"
@@ -158,7 +149,6 @@ df = load_data()
 if df.empty:
     st.stop()
 
-# Key Column Definitions
 BLOOMS_COL = "Bloom's Taxonomy Level" if "Bloom's Taxonomy Level" in df.columns else "blooms_level"
 EXAM_COL = "Exam/Course" if "Exam/Course" in df.columns else "exam_name"
 TOPIC_COL = "Topic" if "Topic" in df.columns else "topic"
@@ -166,15 +156,11 @@ TYPE_COL = "Question Type" if "Question Type" in df.columns else "question_type"
 
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
-# -----------------------------------------------------------------------------
-# SESSION STATE SETUP
-# -----------------------------------------------------------------------------
 if "selected_indices" not in st.session_state:
     st.session_state.selected_indices = set()
 
-# Robust image resolution logic across root and IMAGES directory
 def resolve_image_path(raw_img):
-    if raw_img == "N/A" or pd.isnull(raw_img) or str(raw_img).strip() == "":
+    if raw_img == "N/A" or pd.isnull(raw_img) or str(raw_img).strip() in ["", "nan"]:
         return None
     clean_val = str(raw_img).strip()
     base_name = os.path.basename(clean_val)
@@ -193,9 +179,6 @@ def resolve_image_path(raw_img):
             return cand
     return None
 
-# -----------------------------------------------------------------------------
-# DOCX GENERATION LOGIC (Modes: 'student', 'key_only', 'combined')
-# -----------------------------------------------------------------------------
 def generate_docx(selected_df, mode="student"):
     doc = Document()
 
@@ -203,13 +186,22 @@ def generate_docx(selected_df, mode="student"):
     parent_col = "Parent Question Text" if "Parent Question Text" in selected_df.columns else selected_df.columns[0]
     grouped = selected_df.groupby(parent_col, sort=False)
 
-    if mode in ["student", "combined"]:
+    if mode == "student":
         title = doc.add_heading("BIOLOGY EXAM", level=1)
         title.alignment = WD_ALIGN_PARAGRAPH.CENTER
         doc.add_paragraph("Name: _______________________\t\tSPIRE ID: _____________\n")
         doc.add_paragraph("Instructions: Answer all questions cleanly in the spaces provided.\n")
+    elif mode == "combined_inline":
+        title = doc.add_heading("BIOLOGY EXAM - WITH ANSWER KEY", level=1)
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        doc.add_paragraph("Faculty Review Copy - Questions with Inline Answers & Rubrics\n")
+    elif mode == "key_only":
+        title_key = doc.add_heading("EXAM ANSWER KEY", level=1)
+        title_key.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        doc.add_paragraph("Official Faculty Reference Key & Rubric\n")
 
-        q_num = 1
+    q_num = 1
+    if mode in ["student", "combined_inline"]:
         for parent_text, group in grouped:
             for _, row in group.iterrows():
                 img_path = resolve_image_path(row.get("Image File", row.get("image_path", "N/A")))
@@ -235,27 +227,22 @@ def generate_docx(selected_df, mode="student"):
                 q_p.add_run(f"Q{q_num}. [{q_type} | {b_level}]\n").bold = True
                 q_p.add_run(f"{q_part}\n")
 
-                if q_type in ['Essay', 'Short Answer', 'Draw', 'Open Response']:
-                    doc.add_paragraph("\n\n" + "_"*80 + "\n" + "_"*80 + "\n")
+                if mode == "combined_inline":
+                    ans_val = row.get('Answer Details', row.get('Correct Answer', row.get('correct_answer', 'N/A')))
+                    ans_p = doc.add_paragraph()
+                    ans_p.add_run(f"✓ Answer / Key: {ans_val}").bold = True
+                else:
+                    if q_type in ['Essay', 'Short Answer', 'Draw', 'Open Response']:
+                        doc.add_paragraph("\n\n" + "_"*80 + "\n" + "_"*80 + "\n")
 
                 doc.add_paragraph()
                 q_num += 1
 
-    if mode == "combined":
-        doc.add_page_break()
-
-    if mode in ["key_only", "combined"]:
-        title_key = doc.add_heading("EXAM ANSWER KEY", level=1)
-        title_key.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        doc.add_paragraph("Official Faculty Reference Key & Rubric\n")
-
-        q_num = 1
+    elif mode == "key_only":
         for parent_text, group in grouped:
             for idx, row in group.iterrows():
                 ans_val = row.get('Answer Details', row.get('Correct Answer', row.get('correct_answer', 'N/A')))
                 b_level = row.get(BLOOMS_COL, 'N/A')
-                q_part = row.get('Question Part Text', row.get('Question Text', row.get('question_text', '')))
-
                 ans_p = doc.add_paragraph()
                 ans_p.add_run(f"Q{q_num} [{b_level}]: ").bold = True
                 ans_p.add_run(f"{ans_val}\n")
@@ -266,9 +253,6 @@ def generate_docx(selected_df, mode="student"):
     buffer.seek(0)
     return buffer
 
-# -----------------------------------------------------------------------------
-# SIDEBAR
-# -----------------------------------------------------------------------------
 if logo_b64:
     sidebar_img = f'<img src="{logo_b64}" width="48" style="vertical-align: middle; margin-right: 8px;">'
     st.sidebar.markdown(f"### {sidebar_img} TEDDIE Test Builder", unsafe_allow_html=True)
@@ -338,7 +322,6 @@ st.sidebar.subheader("Export Test Documents")
 if len(st.session_state.selected_indices) > 0:
     selected_df = df.loc[sorted(list(st.session_state.selected_indices))]
 
-    # 1. Student Exam Only
     student_docx = generate_docx(selected_df, mode="student")
     st.sidebar.download_button(
         label="📄 1) Download Student Exam (.docx)",
@@ -348,7 +331,6 @@ if len(st.session_state.selected_indices) > 0:
         use_container_width=True
     )
 
-    # 2. Answer Key Only
     key_docx = generate_docx(selected_df, mode="key_only")
     st.sidebar.download_button(
         label="🔑 2) Download Answer Key (.docx)",
@@ -358,21 +340,17 @@ if len(st.session_state.selected_indices) > 0:
         use_container_width=True
     )
 
-    # 3. Combined Exam + Answer Key
-    combined_docx = generate_docx(selected_df, mode="combined")
+    combined_docx = generate_docx(selected_df, mode="combined_inline")
     st.sidebar.download_button(
-        label="📑 3) Download Exam + Answer Key (.docx)",
+        label="📑 3) Download Questions + Answers Inline (.docx)",
         data=combined_docx,
-        file_name="TEDDI_Exam_With_Answer_Key.docx",
+        file_name="TEDDI_Exam_Questions_And_Answers.docx",
         mime=DOCX_MIME,
         use_container_width=True
     )
 else:
     st.sidebar.info("Add questions to the basket to export docx files.")
 
-# -----------------------------------------------------------------------------
-# MAIN CONTENT
-# -----------------------------------------------------------------------------
 st.subheader("Explore Question Bank")
 
 col1, col2, col3, col4 = st.columns(4)
