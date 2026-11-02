@@ -203,11 +203,9 @@ def generate_docx(selected_df, include_answers=False):
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     if not include_answers:
-        doc.add_paragraph("Name: _______________________		SPIRE ID: _____________
-")
+        doc.add_paragraph("Name: _______________________\t\tSPIRE ID: _____________\n")
 
-    doc.add_paragraph("Instructions: Answer all questions cleanly in the spaces provided.
-")
+    doc.add_paragraph("Instructions: Answer all questions cleanly in the spaces provided.\n")
 
     selected_df = selected_df.sort_index()
     parent_col = "Parent Question Text" if "Parent Question Text" in selected_df.columns else selected_df.columns[0]
@@ -236,10 +234,8 @@ def generate_docx(selected_df, include_answers=False):
             q_part = row.get('Question Part Text', row.get('Question Text', row.get('question_text', '')))
 
             q_p = doc.add_paragraph()
-            q_p.add_run(f"Q{q_num}. [{q_type} | {b_level}]
-").bold = True
-            q_p.add_run(f"{q_part}
-")
+            q_p.add_run(f"Q{q_num}. [{q_type} | {b_level}]\n").bold = True
+            q_p.add_run(f"{q_part}\n")
 
             if include_answers:
                 ans_p = doc.add_paragraph()
@@ -247,11 +243,7 @@ def generate_docx(selected_df, include_answers=False):
                 ans_p.add_run(f"Correct Answer: {ans_val}").bold = True
             else:
                 if q_type in ['Essay', 'Short Answer', 'Draw', 'Open Response']:
-                    doc.add_paragraph("
-
-" + "_"*80 + "
-" + "_"*80 + "
-")
+                    doc.add_paragraph("\n\n" + "_"*80 + "\n" + "_"*80 + "\n")
 
             doc.add_paragraph()
             q_num += 1
@@ -402,15 +394,13 @@ for idx, row in filtered_df.iterrows():
     with st.expander(card_label):
         parent_txt = row.get('Parent Question Text', 'N/A')
         if parent_txt != "N/A" and str(parent_txt).strip() != "":
-            st.markdown(f"**Scenario / Context:**
-> *{parent_txt}*")
+            st.markdown(f"**Scenario / Context:**\n> *{parent_txt}*")
 
         q_txt = row.get('Question Part Text', row.get('Question Text', row.get('question_text', '')))
         ans_txt = row.get('Answer Details', row.get('Correct Answer', row.get('correct_answer', 'N/A')))
 
         st.markdown(f"**Question:** {q_txt}")
-        
-        # Options if available
+
         opts = row.get('options', row.get('Options', 'N/A'))
         if opts != "N/A" and pd.notna(opts) and str(opts).strip() != "":
             st.markdown("**Options:**")
