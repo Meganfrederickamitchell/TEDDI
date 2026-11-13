@@ -1,0 +1,22 @@
+
+# Local Python environment
+exam_env/
+__pycache__/
+*.pyc
+
+# Temporary figure extraction
+extracted_images/
+
+# Confidential source exams
+*.pdf
+
+# Local backups
+*_backup.py
+appINPROGRESS.py
+app_1.py
+app_original.py
+original_exam_questions_extracted.csv
+
+# Credentials
+.streamlit/secrets.toml
+
