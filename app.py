@@ -1076,17 +1076,32 @@ elif page == "Exam Basket":
             siblings
         )
 
+        allow_draft = False
+
         if not missing.empty:
 
-            st.error(
-                "Resolve missing figures before "
-                "exporting student or faculty exams."
+            st.warning(
+                "Some selected questions require missing figures. "
+                "Resolve these figures before distributing the exam."
             )
 
             st.dataframe(
                 report,
                 hide_index=True
             )
+
+            allow_draft = st.checkbox(
+                "Allow draft export with missing figures",
+                value=False,
+                key="allow_draft_export",
+                help="Download an incomplete exam for editing and review."
+            )
+
+            if allow_draft:
+                st.info(
+                    "Draft export enabled. Insert missing figures "
+                    "before distributing this exam to students."
+                )
 
         version = tuple(
             (
@@ -1113,7 +1128,14 @@ elif page == "Exam Basket":
             if (
                 mode != "key"
                 and not missing.empty
+                and not allow_draft
             ):
+                col.button(
+                    f"Download {label}",
+                    disabled=True,
+                    key=f"blocked_export_{mode}",
+                    help="Resolve missing figures or enable draft export."
+                )
                 continue
 
             try:
