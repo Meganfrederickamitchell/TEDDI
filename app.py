@@ -655,10 +655,12 @@ def export(
     title,
     course,
     instructions,
-    image_version
+    image_version,
+    allow_draft=False
 ):
 
     doc = Document()
+    missing_figures = []
 
     suffix = {
         "student": "",
@@ -719,9 +721,23 @@ def export(
 
                 if not path:
 
-                    raise ValueError(
-                        f"Missing figure: {name}"
+                    if not allow_draft:
+                        raise ValueError(
+                            f"Missing figure: {name}"
+                        )
+
+                    missing_figures.append(name)
+
+                    p = doc.add_paragraph()
+                    p.add_run(
+                        f"[MISSING FIGURE: {name}]"
+                    ).bold = True
+
+                    doc.add_paragraph(
+                        "Insert figure before distribution."
                     )
+
+                    continue
 
                 doc.add_picture(
                     str(path),
@@ -783,6 +799,12 @@ def export(
                     doc.add_paragraph("_" * 75)
 
             n += 1
+
+    if missing_figures:
+        warning = heading.insert_paragraph_before()
+        warning.add_run(
+            "DRAFT EXAM - MISSING FIGURES - DO NOT DISTRIBUTE"
+        ).bold = True
 
     buf = BytesIO()
 
@@ -1147,13 +1169,18 @@ elif page == "Exam Basket":
                     title,
                     course,
                     instructions,
-                    version
+                    version,
+                    allow_draft=allow_draft
                 )
 
                 col.download_button(
                     "Download " + label,
                     content,
-                    f"TEDDIE_{mode}.docx",
+                    (
+                        f"TEDDIE_{mode}_DRAFT.docx"
+                        if mode != "key" and not missing.empty
+                        else f"TEDDIE_{mode}.docx"
+                    ),
                     MIME
                 )
 
